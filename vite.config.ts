@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const runtime = globalThis as unknown as {
@@ -10,8 +10,4 @@ export default defineConfig({
   base: isGitHubPages ? '/GeoStamp-/' : '/',
   plugins: [react()],
   server: { host: '0.0.0.0' },
-  test: {
-    environment: 'jsdom',
-    setupFiles: './src/test-setup.ts',
-  },
 });
