@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import type { PhotoItem, EditorTab, StampSettings } from './types';
-import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg } from './lib/metadata';
+import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg, preserveExifOnJpeg } from './lib/metadata';
 import { renderStampedPhoto } from './lib/stamp';
 
 const MAX_FILE_MB = 40;
@@ -182,6 +182,7 @@ export default function App() {
           const hasStamp = stamp.enabled && showStamped && outputFormat !== 'original';
           if (hasStamp) {
             blob = await renderStampedPhoto(photo, stamp, Number(quality) / 100);
+            if (keepExif && isJpeg) blob = await preserveExifOnJpeg(photo.file, blob);
             name = outputName(photo.name, 'stamped');
           }
           if (removeGps && isJpeg) {

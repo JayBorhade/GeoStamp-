@@ -44,6 +44,20 @@ function toDms(value: number): [[number, number], [number, number], [number, num
   return [[degrees, 1], [minutes, 1], [seconds, 10000]];
 }
 
+export async function preserveExifOnJpeg(original: File, rendered: Blob): Promise<Blob> {
+  if (!original.name.toLowerCase().match(/\.jpe?g$/i) && !original.type.toLowerCase().includes('jpeg')) {
+    throw new Error('Preserving EXIF is currently supported for JPEG originals only.');
+  }
+  const originalData = await fileToDataUrl(original);
+  const renderedData = await blobToDataUrl(rendered);
+  const exif = piexif.load(originalData) as unknown as Record<string, unknown>;
+  const ifd0 = (exif['0th'] ?? {}) as Record<string | number, unknown>;
+  // The rendered pixels are already oriented by the browser; reset EXIF orientation to avoid a second rotation.
+  ifd0[piexif.ImageIFD.Orientation] = 1;
+  exif['0th'] = ifd0;
+  return dataUrlToBlob(piexif.insert(piexif.dump(exif as never), renderedData));
+}
+
 export async function writeGpsToJpeg(file: File, latitude: number, longitude: number, altitude?: number): Promise<Blob> {
   if (!file.type.toLowerCase().includes('jpeg') && !file.name.toLowerCase().match(/\.jpe?g$/)) {
     throw new Error('GPS metadata writing currently supports JPEG files only. Export a JPEG to continue.');
@@ -82,6 +96,14 @@ function fileToDataUrl(file: File): Promise<string> {
     reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read photo.'));
     reader.onerror = () => reject(new Error('Could not read photo.'));
     reader.readAsDataURL(file);
+  });
+}
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read rendered image.'));
+    reader.onerror = () => reject(new Error('Could not read rendered image.'));
+    reader.readAsDataURL(blob);
   });
 }
 function dataUrlToBlob(dataUrl: string): Blob {
