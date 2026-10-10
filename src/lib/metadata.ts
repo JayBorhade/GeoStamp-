@@ -1,6 +1,8 @@
 import * as exifr from 'exifr';
 import piexif from 'piexifjs';
 
+const EMPTY_JPEG_DATA_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwD/2Q==';
+
 export interface ReadMetadata {
   latitude?: number;
   longitude?: number;
@@ -59,7 +61,7 @@ export async function preserveExifOnJpeg(original: File, rendered: Blob): Promis
   }
   const originalData = await fileToDataUrl(original);
   const renderedData = await blobToDataUrl(rendered);
-  const exif = piexif.load(originalData) as unknown as Record<string, unknown>;
+  const exif = loadExifOrEmpty(originalData);
   const ifd0 = (exif['0th'] ?? {}) as Record<string | number, unknown>;
   // The rendered pixels are already oriented by the browser; reset EXIF orientation to avoid a second rotation.
   ifd0[274] = 1;
@@ -74,9 +76,7 @@ export async function writeGpsToJpeg(file: File, latitude: number, longitude: nu
     throw new Error('GPS metadata writing currently supports JPEG files only. Export a JPEG to continue.');
   }
   const dataUrl = await fileToDataUrl(file);
-  let exif: Record<string, unknown>;
-  try { exif = piexif.load(dataUrl) as unknown as Record<string, unknown>; }
-  catch { exif = piexif.load('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwD/2Q==') as unknown as Record<string, unknown>; }
+  const exif = loadExifOrEmpty(dataUrl);
   const gps = (exif.GPS ?? {}) as Record<string, unknown>;
   gps[piexif.GPSIFD.GPSLatitudeRef] = latitude < 0 ? 'S' : 'N';
   gps[piexif.GPSIFD.GPSLatitude] = toDms(latitude);
@@ -96,9 +96,29 @@ export async function removeGpsFromJpeg(file: File): Promise<Blob> {
     throw new Error('GPS removal currently supports JPEG files only.');
   }
   const dataUrl = await fileToDataUrl(file);
-  const exif = piexif.load(dataUrl) as unknown as Record<string, unknown>;
+  const exif = loadExifOrEmpty(dataUrl);
   exif.GPS = {};
   return dataUrlToBlob(piexif.insert(piexif.dump(exif as never), dataUrl));
+}
+
+function loadExifOrEmpty(dataUrl: string): Record<string, unknown> {
+  try {
+    return piexif.load(dataUrl) as unknown as Record<string, unknown>;
+  } catch (error) {
+    // A valid JPEG without an EXIF segment is normal. Only use an empty EXIF
+    // template when the source truly has no EXIF marker; malformed EXIF should
+    // remain an actionable error instead of silently discarding metadata.
+    const encoded = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    const binary = atob(encoded);
+    if (binary.includes('Exif\\u0000\\u0000')) {
+      throw new Error('This JPEG contains unreadable EXIF metadata. Try exporting without Keep EXIF.');
+    }
+    try {
+      return piexif.load(EMPTY_JPEG_DATA_URL) as unknown as Record<string, unknown>;
+    } catch {
+      throw error;
+    }
+  }
 }
 
 function fileToDataUrl(file: File): Promise<string> {
