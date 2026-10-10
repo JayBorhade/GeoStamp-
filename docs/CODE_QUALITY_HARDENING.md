@@ -15,6 +15,7 @@ This pass targets low-risk correctness and configuration improvements. It intent
 - The branch should not be merged until the CI typecheck, test, and production-build jobs pass.
 
 ## Follow-up priorities
+0. Review the six dependency vulnerabilities reported during CI install (3 moderate, 1 high, 2 critical); inspect the affected dependency paths and apply compatible updates before production. Avoid blind `npm audit fix --force` because it can introduce breaking changes.
 1. Split the large `src/App.tsx` component into focused UI/workflow modules behind regression coverage.
 2. Expand real-file JPEG EXIF round-trip tests, including GPS removal, missing EXIF, malformed EXIF, and negative altitude.
 3. Add a committed package lockfile and switch CI to `npm ci` for reproducible installs.
