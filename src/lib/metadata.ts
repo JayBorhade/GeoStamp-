@@ -35,13 +35,22 @@ function finite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function toDms(value: number): [[number, number], [number, number], [number, number]] {
-  const abs = Math.abs(value);
-  const degrees = Math.floor(abs);
-  const minutesFloat = (abs - degrees) * 60;
-  const minutes = Math.floor(minutesFloat);
-  const seconds = Math.round((minutesFloat - minutes) * 60 * 10000);
-  return [[degrees, 1], [minutes, 1], [seconds, 10000]];
+/** Convert decimal degrees to EXIF DMS rationals without invalid 60-second/minute values. */
+export function toDms(value: number): [[number, number], [number, number], [number, number]] {
+  if (!Number.isFinite(value)) throw new Error('Coordinate must be a finite number.');
+
+  // Round once at 1/10,000-second precision, then split the integer units.
+  // This naturally carries a rounded 60 seconds/minutes into the next unit.
+  const unitsPerSecond = 10_000;
+  const unitsPerDegree = 3_600 * unitsPerSecond;
+  let remaining = Math.round(Math.abs(value) * unitsPerDegree);
+  const degrees = Math.floor(remaining / unitsPerDegree);
+  remaining -= degrees * unitsPerDegree;
+  const unitsPerMinute = 60 * unitsPerSecond;
+  const minutes = Math.floor(remaining / unitsPerMinute);
+  const secondsUnits = remaining - minutes * unitsPerMinute;
+
+  return [[degrees, 1], [minutes, 1], [secondsUnits, unitsPerSecond]];
 }
 
 export async function preserveExifOnJpeg(original: File, rendered: Blob): Promise<Blob> {
