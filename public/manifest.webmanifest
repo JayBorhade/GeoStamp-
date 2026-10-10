@@ -2,9 +2,17 @@
   "name": "GeoStamp Photo Editor",
   "short_name": "GeoStamp",
   "description": "Edit photo GPS metadata and create visible photo stamps.",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f5f8f6",
   "theme_color": "#087653",
-  "icons": [{ "src": "/geostamp.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "icons": [
+    {
+      "src": "./geostamp.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }

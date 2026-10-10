@@ -1,5 +1,6 @@
 const CACHE_NAME = 'geostamp-shell-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/geostamp.svg'];
+const APP_ROOT = new URL('./', self.registration.scope).pathname;
+const APP_SHELL = [APP_ROOT, APP_ROOT + 'manifest.webmanifest', APP_ROOT + 'geostamp.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
@@ -17,7 +18,7 @@ self.addEventListener('fetch', event => {
       const copy = response.clone();
       caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
       return response;
-    }).catch(async () => (await caches.match(request)) || (await caches.match('/'))));
+    }).catch(async () => (await caches.match(request)) || (await caches.match(APP_ROOT))));
     return;
   }
   if (['script', 'style', 'image', 'font'].includes(request.destination)) {
