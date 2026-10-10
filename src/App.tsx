@@ -87,7 +87,7 @@ export default function App() {
           id: id(), file, url, name: file.name, size: file.size,
           width: dimensions.width, height: dimensions.height,
           latitude: metadata.latitude, longitude: metadata.longitude, altitude: metadata.altitude,
-          locationName: '', dateTime: metadata.dateTime ?? '', tags: [], status: 'ready'
+          locationName: '', dateTime: metadata.dateTime ?? '', tags: [], status: 'ready', removeGps: false
         });
       } catch {
         URL.revokeObjectURL(url);
@@ -125,7 +125,7 @@ export default function App() {
     if (!navigator.geolocation) { setNotice({ kind: 'error', text: 'Location capture is not supported by this browser.' }); return; }
     setBusy(true); setProgress('Requesting location permission…');
     navigator.geolocation.getCurrentPosition(position => {
-      updatePhoto(active.id, { latitude: position.coords.latitude, longitude: position.coords.longitude, altitude: position.coords.altitude ?? undefined });
+      updatePhoto(active.id, { latitude: position.coords.latitude, longitude: position.coords.longitude, altitude: position.coords.altitude ?? undefined, removeGps: false });
       setBusy(false); setProgress('');
       setNotice({ kind: 'success', text: 'Current coordinates captured. Apply to selected photos or export this photo.' });
       setTab('Location');
@@ -142,7 +142,7 @@ export default function App() {
     }
     const ids = selectedIds.length ? selectedIds : [active.id];
     setPhotos(current => current.map(photo => ids.includes(photo.id) ? {
-      ...photo, latitude: active.latitude, longitude: active.longitude, altitude: active.altitude, locationName: active.locationName
+      ...photo, latitude: active.latitude, longitude: active.longitude, altitude: active.altitude, locationName: active.locationName, removeGps: false
     } : photo));
     setNotice({ kind: 'success', text: `Location applied to ${ids.length} photo${ids.length === 1 ? '' : 's'}.` });
   };
@@ -150,7 +150,7 @@ export default function App() {
   const removeLocationFromSelected = () => {
     const ids = selectedIds.length ? selectedIds : active ? [active.id] : [];
     if (!ids.length) return;
-    setPhotos(current => current.map(photo => ids.includes(photo.id) ? { ...photo, latitude: undefined, longitude: undefined, altitude: undefined, locationName: '' } : photo));
+    setPhotos(current => current.map(photo => ids.includes(photo.id) ? { ...photo, latitude: undefined, longitude: undefined, altitude: undefined, locationName: '', removeGps: true } : photo));
     setNotice({ kind: 'success', text: `GPS values cleared from ${ids.length} photo${ids.length === 1 ? '' : 's'} in the workspace. Export to write the change to copies.` });
   };
 
@@ -185,7 +185,8 @@ export default function App() {
             if (keepExif && isJpeg) blob = await preserveExifOnJpeg(photo.file, blob);
             name = outputName(photo.name, 'stamped');
           }
-          if (removeGps && isJpeg) {
+          if ((removeGps || photo.removeGps) && !isJpeg) throw new Error('GPS metadata removal is supported for JPEG files only. This file was not changed.');
+          if ((removeGps || photo.removeGps) && isJpeg) {
             blob = await removeGpsFromJpeg(new File([blob], name, { type: 'image/jpeg' }));
             name = outputName(photo.name, 'no-gps');
           } else if (!removeGps && keepExif && isJpeg && typeof photo.latitude === 'number' && typeof photo.longitude === 'number') {
@@ -338,12 +339,12 @@ export default function App() {
                 <div className="section-title"><div><MapPin size={17} /><strong>GPS location</strong></div><button className="small-green-button" onClick={captureLocation} disabled={busy}><Crosshair size={14} /> Capture</button></div>
                 <p className="field-help">Enter coordinates manually or capture your current position. No map needed.</p>
                 <div className="field-grid two">
-                  <label>Latitude<input type="number" min="-90" max="90" step="any" placeholder="e.g. 19.0760" value={active.latitude ?? ''} onChange={event => updatePhoto(active.id, { latitude: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
-                  <label>Longitude<input type="number" min="-180" max="180" step="any" placeholder="e.g. 72.8777" value={active.longitude ?? ''} onChange={event => updatePhoto(active.id, { longitude: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
+                  <label>Latitude<input type="number" min="-90" max="90" step="any" placeholder="e.g. 19.0760" value={active.latitude ?? ''} onChange={event => updatePhoto(active.id, { latitude: event.target.value === '' ? undefined : Number(event.target.value), removeGps: false })} /></label>
+                  <label>Longitude<input type="number" min="-180" max="180" step="any" placeholder="e.g. 72.8777" value={active.longitude ?? ''} onChange={event => updatePhoto(active.id, { longitude: event.target.value === '' ? undefined : Number(event.target.value), removeGps: false })} /></label>
                 </div>
                 <label className="field-label">Altitude (metres)<input type="number" step="any" placeholder="Optional" value={active.altitude ?? ''} onChange={event => updatePhoto(active.id, { altitude: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
                 <label className="field-label">Location name <span>Optional</span><input placeholder="e.g. Marine Drive, Mumbai" value={active.locationName} onChange={event => updatePhoto(active.id, { locationName: event.target.value })} /></label>
-                <label className="field-label">Capture date & time <span>Optional</span><input type="datetime-local" value={active.dateTime} onChange={event => updatePhoto(active.id, { dateTime: event.target.value })} /></label>
+                <label className="field-label">Date/time for stamp <span>Optional · not written to EXIF</span><input type="datetime-local" value={active.dateTime} onChange={event => updatePhoto(active.id, { dateTime: event.target.value })} /></label>
                 <div className="location-summary"><MapPin size={16} /><div><strong>{active.locationName || 'Location not named'}</strong><span>{typeof active.latitude === 'number' && typeof active.longitude === 'number' ? `${active.latitude.toFixed(5)}, ${active.longitude.toFixed(5)}` : 'No GPS coordinates set'}</span></div><span className={typeof active.latitude === 'number' && typeof active.longitude === 'number' ? 'status-good' : 'status-muted'}>{typeof active.latitude === 'number' && typeof active.longitude === 'number' ? 'Set' : 'Missing'}</span></div>
                 <div className="button-row"><button className="primary-button" onClick={applyLocationToSelected}><Check size={16} /> Apply to selected</button><button className="secondary-button" onClick={removeLocationFromSelected}><Trash2 size={15} /> Remove GPS</button></div>
               </div>}

@@ -14,6 +14,7 @@ export interface PhotoItem {
   dateTime: string;
   tags: string[];
   status: PhotoStatus;
+  removeGps: boolean;
   error?: string;
 }
 export type EditorTab = 'Location' | 'Stamp' | 'EXIF' | 'Tags';
