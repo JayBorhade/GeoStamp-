@@ -17,7 +17,7 @@ describe('photo helpers', () => {
 
   it('formats valid local datetime values and rejects invalid ones', () => {
     expect(localDateTime('not a date')).toBe('');
-    expect(localDateTime('2024-07-26T10:12:00.000Z')).toMatch(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/);
+    expect(localDateTime('2024-07-26T10:12:00.000Z')).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 });
 
