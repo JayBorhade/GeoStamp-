@@ -5,14 +5,13 @@ import {Aperture,ArrowDownToLine,ArrowLeft,ArrowRight,Check,CheckCircle2,Chevron
 import * as exifr from 'exifr';
 import piexif from 'piexifjs';
 import type {Metadata,Photo,Tab} from './types';
+import {formatBytes as bytes, outputName} from './lib/helpers';
 
 const MAX=50*1024*1024, ACCEPT=['image/jpeg','image/png','image/webp','image/avif'];
 const tabs:Tab[]=['Location','Stamp','EXIF','Tags'];
 const icons={Location:MapPin,Stamp:Fingerprint,EXIF:FileText,Tags:Tag};
-const bytes=(n:number)=>n<1024? n+' B':(n/1024**(n>=1024**3?3:n>=1024**2?2:1)).toFixed(1)+' '+(n>=1024**3?'GB':n>=1024**2?'MB':'KB');
 const localDate=(s?:string)=>{if(!s)return '';const d=new Date(s);if(Number.isNaN(+d))return '';const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;};
 const parseDate=(s:string)=>{if(!s)return undefined;const d=new Date(s);if(Number.isNaN(+d))return undefined;const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}:${p(d.getMonth()+1)}:${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:00`;};
-const outputName=(s:string,stamped:boolean)=>{const base=s.replace(/\\.[^.]+$/,'');const ext=s.match(/\\.[^.]+$/)?.[0]||'.img';return base+'-geostamp'+(stamped?'-stamped':'')+(stamped||/\\.jpe?g$/i.test(s)?'.jpg':ext);};
 const dataBlob=(url:string)=>{const [head,data]=url.split(',');const bin=atob(data);const out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return new Blob([out],{type:head.match(/:(.*?);/)?.[1]||'image/jpeg'});};
 const dms=(v:number)=>{const a=Math.abs(v),d=Math.floor(a),mF=(a-d)*60,m=Math.floor(mF);return [[d,1],[m,1],[Math.round((mF-m)*60000),1000]];};
 function download(blob:Blob,name:string){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1200);}
