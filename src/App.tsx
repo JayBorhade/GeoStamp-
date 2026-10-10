@@ -12,7 +12,7 @@ const icons={Location:MapPin,Stamp:Fingerprint,EXIF:FileText,Tags:Tag};
 const bytes=(n:number)=>n<1024? n+' B':(n/1024**(n>=1024**3?3:n>=1024**2?2:1)).toFixed(1)+' '+(n>=1024**3?'GB':n>=1024**2?'MB':'KB');
 const localDate=(s?:string)=>{if(!s)return '';const d=new Date(s);if(Number.isNaN(+d))return '';const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;};
 const parseDate=(s:string)=>{if(!s)return undefined;const d=new Date(s);if(Number.isNaN(+d))return undefined;const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}:${p(d.getMonth()+1)}:${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:00`;};
-const outputName=(s:string,stamp:boolean)=>s.replace(/\.[^.]+$/,'')+`-geostamp${stamp?'-stamped':''}.jpg`;
+const outputName=(s:string,stamped:boolean)=>{const base=s.replace(/\\.[^.]+$/,'');const ext=s.match(/\\.[^.]+$/)?.[0]||'.img';return base+'-geostamp'+(stamped?'-stamped':'')+(stamped||/\\.jpe?g$/i.test(s)?'.jpg':ext);};
 const dataBlob=(url:string)=>{const [head,data]=url.split(',');const bin=atob(data);const out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return new Blob([out],{type:head.match(/:(.*?);/)?.[1]||'image/jpeg'});};
 const dms=(v:number)=>{const a=Math.abs(v),d=Math.floor(a),mF=(a-d)*60,m=Math.floor(mF);return [[d,1],[m,1],[Math.round((mF-m)*60000),1000]];};
 function download(blob:Blob,name:string){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1200);}
@@ -25,7 +25,7 @@ async function renderExport(p:Photo,keep:boolean,stamp:boolean,quality:number):P
  if((lat===undefined)!==(lon===undefined))throw new Error('Enter both latitude and longitude, or clear both to remove GPS.');
  if(lat!==undefined&&(!Number.isFinite(lat)||lat< -90||lat>90))throw new Error('Latitude must be between −90 and 90.');
  if(lon!==undefined&&(!Number.isFinite(lon)||lon< -180||lon>180))throw new Error('Longitude must be between −180 and 180.');
- // EXIF GPS writing is intentionally restricted to JPEG sources.
+ // EXIF GPS writing is supported for JPEG output, including stamped canvas exports.
  if(!isJpegOutput){if(lat!==undefined||lon!==undefined)throw new Error('GPS metadata writing is supported for JPEG exports only. Add a stamp to convert this image to JPEG, or use a JPEG source.');if(!keep)throw new Error('Removing metadata is supported for JPEG files only. This file cannot be exported with metadata removal enabled.');return blob;}
  const url=await new Promise<string>((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result));r.onerror=()=>rej(new Error('Could not read file bytes.'));r.readAsDataURL(blob);});
  let ex:Record<string,Record<number,unknown>>;try{ex=piexif.load(url) as unknown as Record<string,Record<number,unknown>>;}catch{ex={'0th':{},Exif:{},GPS:{},'1st':{},thumbnail:{}};}
