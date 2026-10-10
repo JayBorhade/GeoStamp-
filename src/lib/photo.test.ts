@@ -23,8 +23,8 @@ describe('photo helpers', () => {
 
 describe('EXIF decimal-degree conversion', () => {
   it('converts ordinary coordinates to DMS rationals', () => {
-    expect(toDms(19.076)).toEqual([[19, 1], [4, 1], [273600, 10000]]);
-    expect(toDms(-72.8777)).toEqual([[72, 1], [52, 1], [396000, 10000]]);
+    expect(toDms(19.076)).toEqual([[19, 1], [4, 1], [336000, 10000]]);
+    expect(toDms(-72.8777)).toEqual([[72, 1], [52, 1], [397200, 10000]]);
   });
 
   it('carries rounding across degree and minute boundaries', () => {
