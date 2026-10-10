@@ -23,7 +23,7 @@ npm install
 npm run dev
 ```
 
-## Verify
+## Deployment\n\nThe project includes a Vercel configuration and a small same-origin service worker for caching the app shell and visited static assets. Deploy over HTTPS for browser geolocation and installability. Verify the installed experience on target browsers before launch.\n\n## Verify
 ```bash
 npm run typecheck
 npm test
