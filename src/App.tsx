@@ -27,7 +27,6 @@ async function renderExport(p:Photo,keep:boolean,stamp:boolean,quality:number):P
  if(lon!==undefined&&(!Number.isFinite(lon)||lon< -180||lon>180))throw new Error('Longitude must be between −180 and 180.');
  // EXIF GPS writing is intentionally restricted to JPEG sources.
  if(!isJpeg){if(lat!==undefined||lon!==undefined)throw new Error('GPS metadata writing is supported for JPEG files only.');return blob;}
- if(!keep&&!lat&&!lon)return blob;
  const url=await new Promise<string>((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result));r.onerror=()=>rej(new Error('Could not read file bytes.'));r.readAsDataURL(blob);});
  let ex:Record<string,Record<number,unknown>>;try{ex=piexif.load(url) as unknown as Record<string,Record<number,unknown>>;}catch{ex={'0th':{},Exif:{},GPS:{},'1st':{},thumbnail:{}};}
  if(!keep){ex['0th']={};ex.Exif={};ex.GPS={};ex['1st']={};ex.thumbnail={};}
