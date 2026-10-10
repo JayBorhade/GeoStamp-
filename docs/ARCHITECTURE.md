@@ -1,36 +1,42 @@
 # GeoStamp Architecture
 
-## Runtime
+## Principles
+- Keep editing workflows simple and discoverable.
+- Process files locally by default; do not upload originals.
+- Keep source files immutable and export new copies.
+- Separate EXIF metadata changes from visible pixel stamping.
+- No map UI; GPS remains editable as coordinates and optional place text.
+- Ad slots are layout components and cannot cover interactive editing surfaces.
 
-GeoStamp is a React + TypeScript single-page application built with Vite. Photos are selected explicitly and processed in browser memory; this initial release has no backend, accounts, database or cloud storage.
+## Stack
+- React + TypeScript + Vite.
+- CSS design tokens and responsive layout.
+- exifr for EXIF reading; piexifjs for JPEG GPS write/remove; Canvas for visible stamps; JSZip for batch downloads.
+- Vitest + React Testing Library for unit/component tests.
 
-## Boundaries
+## State model
+Each selected file is represented by a `PhotoItem` with a stable id, original File, preview object URL, dimensions, GPS values, location label, date/time, tags and processing status. Editing changes the in-memory model; the original File is never mutated.
 
-- `src/App.tsx`: responsive workspace, staged edit state and user workflows.
-- `src/types.ts`: shared photo and metadata types.
-- `src/styles.css`: responsive design system, ad placeholders and mobile breakpoints.
-- `exifr`: reads available EXIF metadata.
-- `piexifjs`: writes supported GPS/date metadata to JPEG exports.
-- Canvas: visible stamp rendering; re-encoding may strip existing metadata.
-- JSZip: bundles successful batch exports and reports per-file failures.
+## Data flow
+1. User explicitly selects images.
+2. Gallery validates type/size and creates preview URLs.
+3. Metadata reader inspects EXIF when possible.
+4. User edits GPS, tags, stamp settings or metadata.
+5. Export creates a new Blob; batch downloads are packaged in ZIP.
+6. Status and errors are shown per photo; preview URLs are revoked when photos are removed/unmounted.
 
-## Processing pipeline
+## Important format caveats
+- JPEG GPS writing uses EXIF APP1 metadata and requires verification on actual camera files.
+- Canvas stamping re-encodes pixels and may drop metadata. If Keep EXIF is enabled, metadata must be explicitly reattached where supported; never imply that a canvas export preserves EXIF automatically.
+- JPEG-only GPS editing must be stated in the UI; unsupported formats may be previewed/stamped but should not claim EXIF write support.
+- Production hardening must include real-file round-trip tests for GPS write/remove and stamp/export combinations.
 
-1. Validate file type and 50 MB limit.
-2. Create local object URL and parse metadata without mutating the source.
-3. Stage edits in UI state.
-4. Optionally render a visible stamp to image pixels.
-5. Write supported GPS/date fields to JPEG EXIF where enabled.
-6. Download a new output file or ZIP. Never intentionally overwrite source files.
-
-## Privacy
-
-No photo upload or external geocoding is performed in this version. Browser geolocation is requested only after an explicit user click and browser permission. Do not add telemetry that records photo bytes, filenames or precise coordinates. Future place search must disclose what is sent to its provider. Do not put secret keys in client code.
+## Security and privacy
+- Geolocation is user-initiated and permission-gated.
+- Do not store image content or precise coordinates in analytics.
+- Any future geocoding service must be behind a provider abstraction and disclose outbound location queries.
+- No secrets in frontend environment variables.
+- Validate file sizes and avoid unbounded batch processing.
 
 ## Advertising
-
-Ad placements are visual placeholders only. Any future ad provider must reserve dimensions, respect consent and regional requirements, and never overlay the preview, controls, dialogs or download action. Large ad slots should be hidden/reflowed on mobile.
-
-## Known limitations
-
-No map UI, place search, cloud accounts or payments. JPEG is the only format intended for EXIF writing. Tags are session labels and are not embedded as image keywords. The manifest is present; offline behavior and native packaging need additional device testing.
+Top banner and desktop side rail are reserved layout slots. An optional in-content slot appears below editing controls. Slots collapse or reposition on narrow screens and never overlap editor controls, dialogs, or sticky download actions.

@@ -1,0 +1,93 @@
+import * as exifr from 'exifr';
+import piexif from 'piexifjs';
+
+export interface ReadMetadata {
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  dateTime?: string;
+  make?: string;
+  model?: string;
+  orientation?: number;
+}
+
+export async function readMetadata(file: File): Promise<ReadMetadata> {
+  const parsed = await exifr.parse(file, { gps: true, exif: true, tiff: true, ifd0: true }).catch(() => null);
+  if (!parsed) return {};
+  const date = parsed.DateTimeOriginal ?? parsed.CreateDate ?? parsed.ModifyDate;
+  let dateTime = '';
+  if (date instanceof Date && !Number.isNaN(date.getTime())) {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    dateTime = local.toISOString().slice(0, 16);
+  }
+  return {
+    latitude: finite(parsed.latitude) ? parsed.latitude : undefined,
+    longitude: finite(parsed.longitude) ? parsed.longitude : undefined,
+    altitude: finite(parsed.GPSAltitude) ? parsed.GPSAltitude : undefined,
+    dateTime,
+    make: typeof parsed.Make === 'string' ? parsed.Make.trim() : undefined,
+    model: typeof parsed.Model === 'string' ? parsed.Model.trim() : undefined,
+    orientation: finite(parsed.Orientation) ? parsed.Orientation : undefined
+  };
+}
+
+function finite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function toDms(value: number): [[number, number], [number, number], [number, number]] {
+  const abs = Math.abs(value);
+  const degrees = Math.floor(abs);
+  const minutesFloat = (abs - degrees) * 60;
+  const minutes = Math.floor(minutesFloat);
+  const seconds = Math.round((minutesFloat - minutes) * 60 * 10000);
+  return [[degrees, 1], [minutes, 1], [seconds, 10000]];
+}
+
+export async function writeGpsToJpeg(file: File, latitude: number, longitude: number, altitude?: number): Promise<Blob> {
+  if (!file.type.toLowerCase().includes('jpeg') && !file.name.toLowerCase().match(/\.jpe?g$/)) {
+    throw new Error('GPS metadata writing currently supports JPEG files only. Export a JPEG to continue.');
+  }
+  const dataUrl = await fileToDataUrl(file);
+  let exif: Record<string, unknown>;
+  try { exif = piexif.load(dataUrl) as unknown as Record<string, unknown>; }
+  catch { exif = piexif.load('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwD/2Q==') as unknown as Record<string, unknown>; }
+  const gps = (exif.GPS ?? {}) as Record<string, unknown>;
+  gps[piexif.GPSIFD.GPSLatitudeRef] = latitude < 0 ? 'S' : 'N';
+  gps[piexif.GPSIFD.GPSLatitude] = toDms(latitude);
+  gps[piexif.GPSIFD.GPSLongitudeRef] = longitude < 0 ? 'W' : 'E';
+  gps[piexif.GPSIFD.GPSLongitude] = toDms(longitude);
+  if (typeof altitude === 'number' && Number.isFinite(altitude)) {
+    gps[piexif.GPSIFD.GPSAltitudeRef] = altitude < 0 ? 1 : 0;
+    gps[piexif.GPSIFD.GPSAltitude] = [Math.round(Math.abs(altitude) * 100), 100];
+  }
+  exif.GPS = gps;
+  const output = piexif.insert(piexif.dump(exif as never), dataUrl);
+  return dataUrlToBlob(output);
+}
+
+export async function removeGpsFromJpeg(file: File): Promise<Blob> {
+  if (!file.type.toLowerCase().includes('jpeg') && !file.name.toLowerCase().match(/\.jpe?g$/)) {
+    throw new Error('GPS removal currently supports JPEG files only.');
+  }
+  const dataUrl = await fileToDataUrl(file);
+  const exif = piexif.load(dataUrl) as unknown as Record<string, unknown>;
+  exif.GPS = {};
+  return dataUrlToBlob(piexif.insert(piexif.dump(exif as never), dataUrl));
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read photo.'));
+    reader.onerror = () => reject(new Error('Could not read photo.'));
+    reader.readAsDataURL(file);
+  });
+}
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, content] = dataUrl.split(',');
+  const bytes = atob(content);
+  const array = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) array[i] = bytes.charCodeAt(i);
+  return new Blob([array], { type: meta.match(/data:([^;]+)/)?.[1] ?? 'image/jpeg' });
+}

@@ -1,1 +1,10 @@
-{"name":"GeoStamp Photo Editor","short_name":"GeoStamp","description":"Private photo GPS metadata and location stamping tools.","start_url":"/","display":"standalone","background_color":"#f6f8f6","theme_color":"#087a50","icons":[{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "GeoStamp Photo Editor",
+  "short_name": "GeoStamp",
+  "description": "Edit photo GPS metadata and create visible photo stamps.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f8f6",
+  "theme_color": "#087653",
+  "icons": [{ "src": "/geostamp.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

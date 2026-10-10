@@ -1,76 +1,418 @@
-import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import type { DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+  MapPin, Tag, FilePenLine, Stamp, Layers3, Trash2, Download, Upload,
+  HelpCircle, Settings, Crown, CheckCircle2, Image as ImageIcon, Search, X,
+  Plus, Minus, Maximize, RotateCcw, ChevronDown, ChevronLeft, ChevronRight,
+  Crosshair, CalendarDays, ShieldCheck, Menu, Check,
+  SlidersHorizontal, AlertCircle, Info, LoaderCircle
+} from 'lucide-react';
 import JSZip from 'jszip';
-import {Aperture,ArrowDownToLine,ArrowLeft,ArrowRight,Check,CheckCircle2,ChevronDown,Clock3,Copy,Crosshair,Download,FileImage,FileText,Fingerprint,GalleryHorizontal,Image as ImageIcon,Layers3,LockKeyhole,MapPin,Minus,Plus,RotateCcw,Settings2,ShieldCheck,Sparkles,Tag,Trash2,Upload,X,Crown,CircleHelp} from 'lucide-react';
-import * as exifr from 'exifr';
-import piexif from 'piexifjs';
-import type {Metadata,Photo,Tab} from './types';
-import {formatBytes as bytes, outputName} from './lib/helpers';
+import type { PhotoItem, EditorTab, StampSettings } from './types';
+import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg } from './lib/metadata';
+import { renderStampedPhoto } from './lib/stamp';
 
-const MAX=50*1024*1024, ACCEPT=['image/jpeg','image/png','image/webp','image/avif'];
-const tabs:Tab[]=['Location','Stamp','EXIF','Tags'];
-const icons={Location:MapPin,Stamp:Fingerprint,EXIF:FileText,Tags:Tag};
-const localDate=(s?:string)=>{if(!s)return '';const d=new Date(s);if(Number.isNaN(+d))return '';const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;};
-const parseDate=(s:string)=>{if(!s)return undefined;const d=new Date(s);if(Number.isNaN(+d))return undefined;const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}:${p(d.getMonth()+1)}:${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:00`;};
-const dataBlob=(url:string)=>{const [head,data]=url.split(',');const bin=atob(data);const out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return new Blob([out],{type:head.match(/:(.*?);/)?.[1]||'image/jpeg'});};
-const dms=(v:number)=>{const a=Math.abs(v),d=Math.floor(a),mF=(a-d)*60,m=Math.floor(mF);return [[d,1],[m,1],[Math.round((mF-m)*60000),1000]];};
-function download(blob:Blob,name:string){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1200);}
-async function metadata(file:File):Promise<Metadata>{const m=await exifr.parse(file).catch(()=>undefined) as Record<string,unknown>|undefined;const lat=typeof m?.latitude==='number'?m.latitude:undefined,lon=typeof m?.longitude==='number'?m.longitude:undefined;return {latitude:lat,longitude:lon,altitude:typeof m?.altitude==='number'?m.altitude:undefined,dateTime:typeof m?.DateTimeOriginal==='string'?m.DateTimeOriginal:m?.DateTimeOriginal instanceof Date?m.DateTimeOriginal.toISOString():undefined,make:typeof m?.Make==='string'?m.Make:undefined,model:typeof m?.Model==='string'?m.Model:undefined,width:typeof m?.ExifImageWidth==='number'?m.ExifImageWidth:undefined,height:typeof m?.ExifImageHeight==='number'?m.ExifImageHeight:undefined,hasGps:lat!==undefined&&lon!==undefined};}
-function gpsDms(v:number){return dms(v) as [[number,number],[number,number],[number,number]];}
-async function renderExport(p:Photo,keep:boolean,stamp:boolean,quality:number):Promise<Blob>{
- let blob:Blob=p.file;const isJpeg=p.file.type==='image/jpeg'||/\.jpe?g$/i.test(p.file.name);
- if(stamp&&p.stamp){const img=await new Promise<HTMLImageElement>((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Could not decode image for stamping.'));i.src=p.url;});const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const ctx=c.getContext('2d');if(!ctx)throw new Error('Canvas is unavailable.');ctx.drawImage(img,0,0);const scale=Math.max(1,c.width/1200),pad=16*scale,size=20*scale,lines=[p.location,p.dateTime?new Date(p.dateTime).toLocaleString():'',p.latitude&&p.longitude?`${Number(p.latitude).toFixed(5)}°, ${Number(p.longitude).toFixed(5)}°`:''].filter(Boolean);if(lines.length){ctx.font=`600 ${size}px system-ui`;const w=Math.min(c.width-pad*2,Math.max(...lines.map(x=>ctx.measureText(x).width))+pad*2),h=lines.length*size*1.45+pad*2,x=pad,y=c.height-h-pad;ctx.fillStyle='rgba(10,25,19,.8)';ctx.beginPath();ctx.roundRect(x,y,w,h,10*scale);ctx.fill();ctx.fillStyle='#fff';lines.forEach((line,i)=>ctx.fillText(line,x+pad,y+pad+size+i*size*1.45,w-pad*2));}blob=await new Promise<Blob>((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('Could not render stamp.')),'image/jpeg',quality));}
- const isJpegOutput=isJpeg||(stamp&&p.stamp);const lat=p.latitude.trim()?Number(p.latitude):undefined,lon=p.longitude.trim()?Number(p.longitude):undefined;
- if((lat===undefined)!==(lon===undefined))throw new Error('Enter both latitude and longitude, or clear both to remove GPS.');
- if(lat!==undefined&&(!Number.isFinite(lat)||lat< -90||lat>90))throw new Error('Latitude must be between −90 and 90.');
- if(lon!==undefined&&(!Number.isFinite(lon)||lon< -180||lon>180))throw new Error('Longitude must be between −180 and 180.');
- // EXIF GPS writing is supported for JPEG output, including stamped canvas exports.
- if(!isJpegOutput){if(lat!==undefined||lon!==undefined)throw new Error('GPS metadata writing is supported for JPEG exports only. Add a stamp to convert this image to JPEG, or use a JPEG source.');if(!keep)throw new Error('Removing metadata is supported for JPEG files only. This file cannot be exported with metadata removal enabled.');return blob;}
- const url=await new Promise<string>((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result));r.onerror=()=>rej(new Error('Could not read file bytes.'));r.readAsDataURL(blob);});
- let ex:Record<string,Record<number,unknown>>;try{ex=piexif.load(url) as unknown as Record<string,Record<number,unknown>>;}catch{ex={'0th':{},Exif:{},GPS:{},'1st':{},thumbnail:{}};}
- if(!keep){ex['0th']={};ex.Exif={};ex.GPS={};ex['1st']={};ex.thumbnail={};}
- ex.GPS={};if(lat!==undefined&&lon!==undefined){ex.GPS[piexif.GPSIFD.GPSLatitudeRef]=lat<0?'S':'N';ex.GPS[piexif.GPSIFD.GPSLatitude]=gpsDms(lat);ex.GPS[piexif.GPSIFD.GPSLongitudeRef]=lon<0?'W':'E';ex.GPS[piexif.GPSIFD.GPSLongitude]=gpsDms(lon);const alt=p.altitude.trim()?Number(p.altitude):undefined;if(alt!==undefined&&Number.isFinite(alt)){ex.GPS[piexif.GPSIFD.GPSAltitudeRef]=alt<0?1:0;ex.GPS[piexif.GPSIFD.GPSAltitude]=[Math.round(Math.abs(alt)*100),100];}ex.GPS[piexif.GPSIFD.GPSVersionID]=[2,3,0,0];}
- const date=parseDate(p.dateTime);if(date&&keep)ex.Exif[piexif.ExifIFD.DateTimeOriginal]=date;
- try{return dataBlob(piexif.insert(piexif.dump(ex as never),url));}catch{throw new Error('This JPEG could not be rewritten safely. Try another JPEG file.');}
+const MAX_FILE_MB = 40;
+const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+const initialStamp: StampSettings = {
+  enabled: true, showLocation: true, showDate: true, showCoordinates: false,
+  customText: '', position: 'bottom-left', style: 'classic', opacity: 88,
+  color: '#ffffff', background: '#102a23'
+};
+
+function formatSize(bytes: number) {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+function id() { return `photo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
+function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = name; anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function outputName(name: string, suffix: string) {
+  const stem = name.replace(/\.[^.]+$/, '');
+  return `${stem}-${suffix}.jpg`;
 }
 
-export default function App(){
- const [photos,setPhotos]=useState<Photo[]>([]),[activeId,setActiveId]=useState(''),[selected,setSelected]=useState<string[]>([]),[tab,setTab]=useState<Tab>('Location'),[keep,setKeep]=useState(true),[stamp,setStamp]=useState(false),[quality,setQuality]=useState(90),[zoom,setZoom]=useState(70),[busy,setBusy]=useState(false),[search,setSearch]=useState(''),[mobileGallery,setMobileGallery]=useState(false),[settings,setSettings]=useState(false),[toast,setToast]=useState<{kind:string;text:string}|null>(null),[drag,setDrag]=useState(false),[custom,setCustom]=useState('');
- const input=useRef<HTMLInputElement>(null),photoRef=useRef<Photo[]>([]),active=photos.find(p=>p.id===activeId)||photos[0],chosen=photos.filter(p=>selected.includes(p.id)),filtered=useMemo(()=>photos.filter(p=>p.file.name.toLowerCase().includes(search.toLowerCase())),[photos,search]);
- const notify=useCallback((kind:string,text:string)=>{setToast({kind,text});window.setTimeout(()=>setToast(v=>v?.text===text?null:v),5000)},[]);
- const update=(id:string,patch:Partial<Photo>)=>setPhotos(prev=>prev.map(p=>p.id===id?{...p,...patch}:p));
- useEffect(()=>{photoRef.current=photos;},[photos]);useEffect(()=>()=>{photoRef.current.forEach(p=>URL.revokeObjectURL(p.url));},[]);
- const addFiles=async(list:FileList|File[]|null)=>{if(!list?.length)return;const created:Photo[]=[];const errors:string[]=[];for(const f of Array.from(list)){if(!ACCEPT.includes(f.type)&&! /\.(jpe?g|png|webp|avif)$/i.test(f.name)){errors.push(f.name+': unsupported format');continue;}if(!f.size||f.size>MAX){errors.push(f.name+': empty or larger than 50 MB');continue;}if(photos.some(p=>p.file.name===f.name&&p.file.size===f.size&&p.file.lastModified===f.lastModified))continue;const meta=await metadata(f).catch(()=>({hasGps:false} as Metadata));created.push({id:crypto.randomUUID?.()||Math.random().toString(36).slice(2),file:f,url:URL.createObjectURL(f),latitude:meta.latitude?.toFixed(6)||'',longitude:meta.longitude?.toFixed(6)||'',altitude:meta.altitude?.toString()||'',location:'',dateTime:localDate(meta.dateTime?.replace(/^(\d{4}):(\d{2}):(\d{2})/,'$1-$2-$3')),tag:'',stamp:false,meta});}if(created.length){setPhotos(prev=>[...prev,...created]);setActiveId(v=>v||created[0].id);setSelected(prev=>prev.length?[...prev,...created.map(p=>p.id)]:[created[0].id]);notify('success',`${created.length} photo(s) added. Your files stay on this device.`);}if(errors.length)notify('error',errors.slice(0,3).join(' · '));};
- const capture=()=>{if(!navigator.geolocation){notify('error','Location capture is unavailable. Enter coordinates manually.');return;}navigator.geolocation.getCurrentPosition(pos=>{if(active)update(active.id,{latitude:pos.coords.latitude.toFixed(6),longitude:pos.coords.longitude.toFixed(6),altitude:pos.coords.altitude?.toFixed(1)||''});else notify('info',`Captured ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}. Add a photo to use it.`);if(active)notify('success','Location captured. Export to save GPS to a JPEG copy.');},e=>notify('error',e.code===1?'Location permission denied. Enter coordinates manually.':'Could not get a location fix. Try again or enter coordinates manually.'),{enableHighAccuracy:true,timeout:12000,maximumAge:30000});};
- const apply=()=>{if(!active)return;const lat=active.latitude.trim(),lon=active.longitude.trim();if(!!lat!==!!lon){notify('error','Enter both latitude and longitude.');return;}if(lat&&(+lat< -90||+lat>90||!Number.isFinite(+lat))){notify('error','Latitude must be between −90 and 90.');return;}if(lon&&(+lon< -180||+lon>180||!Number.isFinite(+lon))){notify('error','Longitude must be between −180 and 180.');return;}const ids=selected.length?selected:[active.id];setPhotos(prev=>prev.map(p=>ids.includes(p.id)?{...p,latitude:active.latitude,longitude:active.longitude,altitude:active.altitude,location:active.location,dateTime:active.dateTime,tag:active.tag,stamp:stamp||p.stamp}:p));notify('success',`Settings applied to ${ids.length} photo(s). Export to save copies.`);};
- const removeGps=()=>{const ids=selected.length?selected:active?[active.id]:[];setPhotos(prev=>prev.map(p=>ids.includes(p.id)?{...p,latitude:'',longitude:'',altitude:''}:p));notify('success',`GPS cleared for ${ids.length} photo(s). Export to save.`);};
- const exportFiles=async()=>{if(!active&&!selected.length){input.current?.click();return;}const list=chosen.length?chosen:[active!];setBusy(true);const errors:string[]=[];let ok=0;try{if(list.length===1){const p=list[0];download(await renderExport(p,keep,stamp,quality/100),outputName(p.file.name,stamp&&p.stamp));ok=1;}else{const zip=new JSZip();for(const p of list){try{zip.file(outputName(p.file.name,stamp&&p.stamp),await renderExport(p,keep,stamp,quality/100));ok++;}catch(e){errors.push(p.file.name+': '+(e instanceof Error?e.message:'failed'));}}if(ok)download(await zip.generateAsync({type:'blob'}),'geostamp-export.zip');}notify(errors.length?'error':'success',errors.length?`${ok} exported; ${errors.length} failed. ${errors[0]}`:`${ok} photo(s) exported. Original files were not overwritten.`);}catch(e){notify('error',e instanceof Error?e.message:'Export failed.');}finally{setBusy(false);}};
- const tool=(name:string)=>{if(name==='Upload Photos')input.current?.click();if(name==='Capture Location')capture();if(name==='Set Location'){setTab('Location');document.getElementById('lat')?.focus();}if(name==='Add Tag'){if(active){const t=window.prompt('Tag for this photo',active.tag);if(t!==null){update(active.id,{tag:t});setTab('Tags');}}}if(name==='Edit EXIF')setTab('EXIF');if(name==='Add Stamp'){setTab('Stamp');setStamp(true);if(active)update(active.id,{stamp:true});}if(name==='Batch Edit'){if(!selected.length)notify('info','Select photos first.');else setTab('Location');}if(name==='Remove Location')removeGps();if(name==='Export')void exportFiles();};
- const tools=[['Upload Photos',Upload],['Capture Location',Crosshair],['Set Location',MapPin],['Add Tag',Tag],['Edit EXIF',FileText],['Add Stamp',Fingerprint],['Batch Edit',Layers3],['Remove Location',Trash2]] as const;
- const stageDrop=(e:DragEvent)=>{e.preventDefault();setDrag(false);void addFiles(e.dataTransfer.files);};
- const copy=async()=>{if(!active?.latitude||!active.longitude)return;try{await navigator.clipboard.writeText(`${active.latitude}, ${active.longitude}`);notify('success','Coordinates copied.');}catch{notify('error','Clipboard is unavailable.');}};
- return <div className="app" onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={e=>{if(e.target===e.currentTarget)setDrag(false)}} onDrop={stageDrop}>
- {drag&&<div className="drop-cover"><Upload size={36}/><h2>Drop photos to add them</h2><p>JPEG, PNG, WebP or AVIF · 50 MB max</p></div>}
- <header className="header"><a className="brand" href="#home"><span className="logo"><MapPin size={27} fill="currentColor"/></span><span><b>GeoStamp</b><small>Edit. Tag. Stamp. Share with Location.</small></span></a><div className="ad top-ad"><i>ADVERTISEMENT</i><b>Make room for your next adventure.</b><small>Reserved banner · 728 × 90</small></div><div className="head-actions"><button onClick={()=>notify('info','Select a photo, edit GPS or stamp settings, then export a copy.')}><CircleHelp size={16}/> Help</button><button onClick={()=>setSettings(true)}><Settings2 size={17}/> Settings</button><button className="upgrade" onClick={()=>notify('info','GeoStamp Pro is coming soon. Core editing remains free.')}><Crown size={15}/> Upgrade</button></div></header>
- <nav className="toolbar">{tools.map(([name,Icon],i)=><button key={name} className={i===0?'primary-tool':name==='Add Stamp'&&tab==='Stamp'?'active-tool':name==='Remove Location'?'danger-tool':''} onClick={()=>tool(name)}><Icon size={17}/><span>{name}</span></button>)}<button className="export-tool" onClick={()=>void exportFiles()}><ArrowDownToLine size={17}/> Export <ChevronDown size={14}/></button></nav>
- <main className="layout">
- <aside className={`gallery card ${mobileGallery?'gallery-open':''}`}><div className="panel-title"><div><h2>Photos <span>{photos.length}</span></h2><small>Choose photos to edit</small></div><button className="link" disabled={!photos.length} onClick={()=>{photos.forEach(p=>URL.revokeObjectURL(p.url));setPhotos([]);setSelected([]);setActiveId('');notify('info','Workspace cleared; source files are unchanged.')}}>Clear all</button></div><div className="gallery-tabs"><button className="selected-tab"><GalleryHorizontal size={14}/> Gallery</button><button onClick={()=>setSearch('')}>Recent</button></div><label className="search"><ImageIcon size={15}/><input placeholder="Search photos…" value={search} onChange={e=>setSearch(e.target.value)}/><ChevronDown size={14}/></label>
- {!photos.length?<button className="upload-empty" onClick={()=>input.current?.click()}><span><Upload size={23}/></span><b>Bring your photos in</b><small>Drag & drop or browse files</small><em>JPEG, PNG, WebP, AVIF · max 50 MB</em></button>:<><div className="select-line"><span>{selected.length} selected</span><button onClick={()=>setSelected(selected.length===photos.length?[]:photos.map(p=>p.id))}>{selected.length===photos.length?'Deselect all':'Select all'}</button></div><div className="photo-list">{filtered.map(p=><div key={p.id} className={`photo-row ${active?.id===p.id?'photo-active':''}`}><button className={`check ${selected.includes(p.id)?'checked':''}`} aria-label={`Select ${p.file.name}`} onClick={()=>setSelected(s=>s.includes(p.id)?s.filter(id=>id!==p.id):[...s,p.id])}>{selected.includes(p.id)&&<Check size={12}/>}</button><button className="thumb" onClick={()=>setActiveId(p.id)}><img src={p.url} alt=""/></button><button className="photo-meta" onClick={()=>setActiveId(p.id)}><b>{p.file.name}</b><small>{bytes(p.file.size)} · {p.meta.width&&p.meta.height?`${p.meta.width} × ${p.meta.height}`:p.file.type.split('/')[1]?.toUpperCase()}</small><em>{p.meta.hasGps?'GPS found':'Ready to edit'}</em></button><button className="remove-mini" aria-label="Remove photo" onClick={()=>{URL.revokeObjectURL(p.url);setPhotos(s=>s.filter(x=>x.id!==p.id));setSelected(s=>s.filter(x=>x!==p.id));if(activeId===p.id)setActiveId('')}}><X size={14}/></button></div>)}</div><button className="add-more" onClick={()=>input.current?.click()}><Plus size={15}/> Add more photos</button><button className="mobile-done" onClick={()=>setMobileGallery(false)}>Done selecting ({selected.length})</button></>}
- <div className="privacy"><ShieldCheck size={16}/><span><b>Private by design</b><small>Files stay in your browser.</small></span></div></aside>
- <section className="editor"><div className="preview card"><div className="preview-head"><b><span className="dot"/> Preview <small>{active?`${photos.findIndex(p=>p.id===active.id)+1} / ${photos.length}`:'Ready when you are'}</small></b><div className="zoom"><button aria-label="Zoom out" onClick={()=>setZoom(z=>Math.max(25,z-10))}><Minus size={14}/></button><span>{zoom}%</span><button aria-label="Zoom in" onClick={()=>setZoom(z=>Math.min(150,z+10))}><Plus size={14}/></button><button aria-label="Reset zoom" onClick={()=>setZoom(70)}><RotateCcw size={14}/></button></div></div><div className={`stage ${active?'stage-image':''}`}>{active?<><img src={active.url} alt={active.file.name} style={{transform:`scale(${zoom/70})`}}/>{stamp&&active.stamp&&<div className="stamp-preview"><MapPin size={18}/><div>{active.location&&<b>{active.location}</b>}{active.dateTime&&<span>{new Date(active.dateTime).toLocaleString()}</span>}{active.latitude&&active.longitude&&<span>{Number(active.latitude).toFixed(5)}°, {Number(active.longitude).toFixed(5)}°</span>}{custom&&<span>{custom}</span>}</div></div>}</>:<div className="empty"><div className="empty-icon"><ImageIcon size={33}/><Sparkles size={16}/></div><h2>Your next photo story starts here</h2><p>Choose a photo to edit GPS details, add a tag, or design a location stamp.</p><button className="primary-button" onClick={()=>input.current?.click()}><Upload size={16}/> Upload photos</button><small>Or drop photos anywhere in this workspace</small></div>}</div><div className="preview-foot"><span><FileImage size={14}/>{active?active.file.type.split('/')[1]?.toUpperCase():'NO PHOTO'} {active&&' · '+bytes(active.file.size)}</span><button onClick={()=>notify('info','Export creates a separate copy. Your original stays untouched.')}><ShieldCheck size={14}/> Original safe</button><button className={active?.stamp?'green-text':''} onClick={()=>{setStamp(s=>!s);if(active)update(active.id,{stamp:!stamp});}}><Aperture size={14}/> Stamp {active?.stamp?'on':'off'}</button></div></div>
- {photos.length>0&&<div className="filmstrip"><button aria-label="Previous photo" onClick={()=>{const i=photos.findIndex(p=>p.id===active?.id);if(i>0)setActiveId(photos[i-1].id)}}><ArrowLeft size={15}/></button><div>{photos.map(p=><button key={p.id} className={active?.id===p.id?'film-active':''} onClick={()=>setActiveId(p.id)}><img src={p.url} alt=""/>{selected.includes(p.id)&&<i><Check size={10}/></i>}</button>)}</div><button aria-label="Next photo" onClick={()=>{const i=photos.findIndex(p=>p.id===active?.id);if(i<photos.length-1)setActiveId(photos[i+1].id)}}><ArrowRight size={15}/></button></div>}
- <div className="ad in-ad"><i>ADVERTISEMENT · SPONSORED</i><div><span><Sparkles size={22}/></span><p><b>More room for what matters.</b><small>This space is reserved for a future advertising partner.</small></p></div><small>In-content placement · 970 × 180</small></div></section>
- <section className="right-column"><div className="settings card"><div className="tabs" role="tablist">{tabs.map(t=>{const Icon=icons[t];return <button role="tab" aria-selected={tab===t} className={tab===t?'tab-active':''} key={t} onClick={()=>setTab(t)}><Icon size={14}/>{t}</button>})}</div>
- {!active?<div className="no-active"><Settings2 size={26}/><b>Editing tools</b><p>Upload a photo to unlock location, stamp, EXIF and tag controls.</p></div>:<div className="form">
- {tab==='Location'&&<><div className="section-head"><span><MapPin size={17}/></span><div><b>GPS location</b><small>{active.latitude&&active.longitude?'Coordinates ready to export':'Add or correct location'}</small></div><button className="capture" onClick={capture}><Crosshair size={14}/> Capture</button></div><div className="field-grid"><label>Latitude<div className="unit"><input id="lat" type="number" min="-90" max="90" step="any" placeholder="19.0760" value={active.latitude} onChange={e=>update(active.id,{latitude:e.target.value})}/><span>°</span></div><small>−90 to 90</small></label><label>Longitude<div className="unit"><input type="number" min="-180" max="180" step="any" placeholder="72.8777" value={active.longitude} onChange={e=>update(active.id,{longitude:e.target.value})}/><span>°</span></div><small>−180 to 180</small></label></div><label className="field">Altitude <em>Optional · metres</em><div className="unit"><input type="number" placeholder="Altitude above sea level" value={active.altitude} onChange={e=>update(active.id,{altitude:e.target.value})}/><span>m</span></div></label><label className="field">Location name <em>Optional</em><div className="input-icon"><MapPin size={14}/><input placeholder="e.g. Pangong Lake, Ladakh" value={active.location} onChange={e=>update(active.id,{location:e.target.value})}/><button onClick={()=>update(active.id,{location:''})}><X size={13}/></button></div></label><label className="field">Capture date & time <em>Optional</em><div className="input-icon"><Clock3 size={14}/><input type="datetime-local" value={active.dateTime} onChange={e=>update(active.id,{dateTime:e.target.value})}/></div></label><div className="note"><ShieldCheck size={15}/> GPS is written to JPEG EXIF on export. No map needed.</div><div className="button-row"><button className="primary-button" onClick={apply}><Check size={15}/> Apply to selected</button><button className="secondary-button" onClick={removeGps}><Trash2 size={14}/> Remove GPS</button></div><button className="copy" disabled={!active.latitude||!active.longitude} onClick={()=>void copy()}><Copy size={13}/> Copy coordinates</button></>}
- {tab==='Stamp'&&<><div className="section-head"><span><Fingerprint size={17}/></span><div><b>Photo stamp</b><small>Text rendered onto the image</small></div><button className={`switch ${active.stamp?'switch-on':''}`} aria-label="Toggle stamp" onClick={()=>{update(active.id,{stamp:!active.stamp});setStamp(!active.stamp)}}><i/></button></div><label className="field">Stamp style<select defaultValue="Classic"><option>Classic</option><option>Minimal</option><option>Travel</option><option>Professional</option><option>Field Report</option></select></label><label className="field">Location title<input className="plain" value={active.location} onChange={e=>update(active.id,{location:e.target.value})} placeholder="Location name"/></label><label className="field">Custom text <em>Optional</em><input className="plain" value={custom} onChange={e=>setCustom(e.target.value)} placeholder="Project or note"/></label><div className="note"><Aperture size={15}/> Stamping changes pixels. The original file remains untouched.</div><button className="primary-button full" onClick={()=>{update(active.id,{stamp:true});setStamp(true);notify('success','Stamp enabled. Export to create a stamped copy.')}}><Sparkles size={15}/> Enable stamp & preview</button></>}
- {tab==='EXIF'&&<><div className="section-head"><span><FileText size={17}/></span><div><b>Photo metadata</b><small>Read from this file</small></div></div><div className="metadata">{[['File name',active.file.name],['Type',active.file.type||'Unknown'],['Size',bytes(active.file.size)],['Dimensions',active.meta.width&&active.meta.height?`${active.meta.width} × ${active.meta.height}`:'Not detected'],['Camera make',active.meta.make||'Not available'],['Camera model',active.meta.model||'Not available'],['Original date',active.meta.dateTime||'Not available'],['GPS in source',active.meta.hasGps?'Found':'Not found']].map(([k,v])=><div key={k}><span>{k}</span><b>{v}</b></div>)}</div><div className="note"><LockKeyhole size={15}/> JPEG EXIF writing is supported; other formats may not preserve metadata.</div><button className="secondary-button full" onClick={()=>setKeep(v=>!v)}><ShieldCheck size={15}/>{keep?'Keep EXIF enabled':'Metadata preservation disabled'}</button></>}
- {tab==='Tags'&&<><div className="section-head"><span><Tag size={17}/></span><div><b>Photo tags</b><small>Organise this session</small></div></div><label className="field">Tag name<input className="plain" placeholder="travel, work, site-visit" value={active.tag} onChange={e=>update(active.id,{tag:e.target.value})}/></label><div className="tag-picks">{['Travel','Work','Family','Site visit','Nature'].map(t=><button key={t} onClick={()=>update(active.id,{tag:t})}>{t}</button>)}</div><div className="note"><Tag size={15}/> Tags organise this session; they are not embedded as image keywords.</div><button className="primary-button full" onClick={()=>{const ids=selected.length?selected:[active.id];setPhotos(prev=>prev.map(p=>ids.includes(p.id)?{...p,tag:active.tag}:p));notify('success',`Tag applied to ${ids.length} photo(s).`)}}><Check size={15}/> Apply tag to selected</button></>}
- </div>}</div><div className="ad side-ad"><i>ADVERTISEMENT</i><Sparkles size={26}/><b>Your next great idea belongs here.</b><small>Reserved ad space<br/>300 × 600</small></div></section></main>
- <footer className="export-bar"><div className="selection-total"><span><Check size={15}/></span><p><b>{selected.length} selected</b><small>{chosen.length?bytes(chosen.reduce((n,p)=>n+p.file.size,0)):'Choose photos to edit'}</small></p></div><div className="export-options"><label>Output<select defaultValue="jpg"><option value="jpg">JPEG</option></select></label><label>JPEG quality<select value={quality} onChange={e=>setQuality(+e.target.value)}><option value={100}>100%</option><option value={95}>95%</option><option value={90}>90%</option><option value={80}>80%</option><option value={70}>70%</option></select></label><button className="toggle-option" onClick={()=>setKeep(v=>!v)}><span className={`switch ${keep?'switch-on':''}`}><i/></span> Keep EXIF</button><button className="toggle-option" onClick={()=>{setStamp(v=>!v);if(active)update(active.id,{stamp:!stamp})}}><span className={`switch ${stamp?'switch-on':''}`}><i/></span> Add stamp</button></div><button className="download" disabled={busy} onClick={()=>void exportFiles()}>{busy?<span className="spinner"/>:<Download size={17}/>}<span>{busy?'Preparing…':`Download ${selected.length>1?'selected':'photo'}`}</span><ArrowRight size={15}/></button></footer>
- <nav className="mobile-nav"><button onClick={()=>setMobileGallery(true)}><GalleryHorizontal size={18}/>Photos</button><button onClick={()=>setTab('Location')}><MapPin size={18}/>Location</button><button className="mobile-download" onClick={()=>void exportFiles()}><Download size={20}/></button><button onClick={()=>setTab('Stamp')}><Fingerprint size={18}/>Stamp</button><button onClick={()=>setSettings(true)}><Settings2 size={18}/>Settings</button></nav>
- {toast&&<div className={`toast ${toast.kind==='error'?'toast-error':''}`} role="status"><CheckCircle2 size={18}/><p>{toast.text}</p><button onClick={()=>setToast(null)} aria-label="Dismiss"><X size={15}/></button></div>}
- {settings&&<div className="backdrop" onClick={()=>setSettings(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={e=>e.stopPropagation()}><header><h2 id="settings-title"><Settings2 size={18}/> Settings & privacy</h2><button onClick={()=>setSettings(false)} aria-label="Close settings"><X size={17}/></button></header><div className="privacy-box"><ShieldCheck size={22}/><div><b>Private by design</b><p>Photos are processed in your browser. This release does not upload files to a server.</p></div></div><div className="setting-row"><span><b>Preserve EXIF</b><small>Keep supported metadata when exporting JPEGs.</small></span><button className={`switch ${keep?'switch-on':''}`} onClick={()=>setKeep(v=>!v)}><i/></button></div><div className="setting-row"><span><b>Visible stamp</b><small>Render the stamp into exported image pixels.</small></span><button className={`switch ${stamp?'switch-on':''}`} onClick={()=>setStamp(v=>!v)}><i/></button></div><div className="setting-row"><span><b>Location permission</b><small>Requested only after you choose Capture Location.</small></span><em>Ask first</em></div><footer><small>GeoStamp v1.0 · Local-first edition</small><button className="primary-button" onClick={()=>setSettings(false)}>Done</button></footer></section></div>}
- <input ref={input} className="sr-only" type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif" onChange={e=>{void addFiles(e.currentTarget.files);e.currentTarget.value=''}}/>
- </div>;
+export default function App() {
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [tab, setTab] = useState<EditorTab>('Location');
+  const [stamp, setStamp] = useState<StampSettings>(initialStamp);
+  const [zoom, setZoom] = useState(70);
+  const [showStamped, setShowStamped] = useState(true);
+  const [keepExif, setKeepExif] = useState(true);
+  const [outputFormat, setOutputFormat] = useState('jpg');
+  const [quality, setQuality] = useState('90');
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [searchTag, setSearchTag] = useState('');
+  const [tagInput, setTagInput] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const objectUrls = useRef<Set<string>>(new Set());
+  const active = photos.find(photo => photo.id === activeId) ?? photos[0] ?? null;
+  const selectedPhotos = photos.filter(photo => selectedIds.includes(photo.id));
+  const totalSize = selectedPhotos.reduce((sum, photo) => sum + photo.size, 0);
+
+  const updatePhoto = useCallback((photoId: string, patch: Partial<PhotoItem>) => {
+    setPhotos(current => current.map(photo => photo.id === photoId ? { ...photo, ...patch } : photo));
+  }, []);
+
+  useEffect(() => () => { objectUrls.current.forEach(url => URL.revokeObjectURL(url)); objectUrls.current.clear(); }, []);
+
+  const addFiles = useCallback(async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    const next: PhotoItem[] = [];
+    const errors: string[] = [];
+    for (const file of files) {
+      const isSupported = ACCEPTED.includes(file.type) || /\.(jpe?g|png|webp|avif)$/i.test(file.name);
+      if (!isSupported) { errors.push(`${file.name}: unsupported format`); continue; }
+      if (file.size > MAX_FILE_MB * 1024 * 1024) { errors.push(`${file.name}: exceeds ${MAX_FILE_MB} MB`); continue; }
+      if (file.size === 0) { errors.push(`${file.name}: empty file`); continue; }
+      const url = URL.createObjectURL(file);
+      objectUrls.current.add(url);
+      try {
+        const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+          image.onerror = () => reject(new Error('Could not decode image'));
+          image.src = url;
+        });
+        const metadata = await readMetadata(file).catch(() => ({}));
+        next.push({
+          id: id(), file, url, name: file.name, size: file.size,
+          width: dimensions.width, height: dimensions.height,
+          latitude: metadata.latitude, longitude: metadata.longitude, altitude: metadata.altitude,
+          locationName: '', dateTime: metadata.dateTime ?? '', tags: [], status: 'ready'
+        });
+      } catch {
+        URL.revokeObjectURL(url);
+        objectUrls.current.delete(url);
+        errors.push(`${file.name}: could not read image`);
+      }
+    }
+    if (next.length) {
+      setPhotos(current => [...current, ...next]);
+      setSelectedIds(current => [...new Set([...current, ...next.map(photo => photo.id)])]);
+      setActiveId(current => current ?? next[0].id);
+      setNotice({ kind: errors.length ? 'info' : 'success', text: `${next.length} photo${next.length === 1 ? '' : 's'} added${errors.length ? `. ${errors.length} skipped — check format or file size.` : '.'}` });
+    } else if (errors.length) setNotice({ kind: 'error', text: errors.slice(0, 2).join(' • ') });
+  }, []);
+
+  const removePhoto = (photoId: string) => {
+    const target = photos.find(photo => photo.id === photoId);
+    if (target) { URL.revokeObjectURL(target.url); objectUrls.current.delete(target.url); }
+    const remaining = photos.filter(photo => photo.id !== photoId);
+    setPhotos(remaining);
+    setSelectedIds(current => current.filter(value => value !== photoId));
+    if (activeId === photoId) setActiveId(remaining[0]?.id ?? null);
+  };
+  const clearAll = () => {
+    photos.forEach(photo => { URL.revokeObjectURL(photo.url); objectUrls.current.delete(photo.url); });
+    setPhotos([]); setActiveId(null); setSelectedIds([]);
+    if (fileInput.current) fileInput.current.value = '';
+    setNotice({ kind: 'info', text: 'Gallery cleared. Your original files were not changed.' });
+  };
+  const toggleSelected = (photoId: string) => setSelectedIds(current => current.includes(photoId) ? current.filter(value => value !== photoId) : [...current, photoId]);
+  const chooseActive = (photo: PhotoItem) => { setActiveId(photo.id); if (!selectedIds.includes(photo.id)) setSelectedIds(current => [...current, photo.id]); };
+
+  const captureLocation = () => {
+    if (!active) { setNotice({ kind: 'info', text: 'Add a photo first, then capture its location.' }); return; }
+    if (!navigator.geolocation) { setNotice({ kind: 'error', text: 'Location capture is not supported by this browser.' }); return; }
+    setBusy(true); setProgress('Requesting location permission…');
+    navigator.geolocation.getCurrentPosition(position => {
+      updatePhoto(active.id, { latitude: position.coords.latitude, longitude: position.coords.longitude, altitude: position.coords.altitude ?? undefined });
+      setBusy(false); setProgress('');
+      setNotice({ kind: 'success', text: 'Current coordinates captured. Apply to selected photos or export this photo.' });
+      setTab('Location');
+    }, error => {
+      setBusy(false); setProgress('');
+      const message = error.code === error.PERMISSION_DENIED ? 'Location permission was denied. Allow location access in your browser settings to use this feature.' : error.code === error.TIMEOUT ? 'Location request timed out. Try again in a place with a clearer signal.' : 'Current location is unavailable. You can enter coordinates manually.';
+      setNotice({ kind: 'error', text: message });
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+  };
+
+  const applyLocationToSelected = () => {
+    if (!active || typeof active.latitude !== 'number' || typeof active.longitude !== 'number') {
+      setNotice({ kind: 'error', text: 'Enter a valid latitude and longitude first.' }); return;
+    }
+    const ids = selectedIds.length ? selectedIds : [active.id];
+    setPhotos(current => current.map(photo => ids.includes(photo.id) ? {
+      ...photo, latitude: active.latitude, longitude: active.longitude, altitude: active.altitude, locationName: active.locationName
+    } : photo));
+    setNotice({ kind: 'success', text: `Location applied to ${ids.length} photo${ids.length === 1 ? '' : 's'}.` });
+  };
+
+  const removeLocationFromSelected = () => {
+    const ids = selectedIds.length ? selectedIds : active ? [active.id] : [];
+    if (!ids.length) return;
+    setPhotos(current => current.map(photo => ids.includes(photo.id) ? { ...photo, latitude: undefined, longitude: undefined, altitude: undefined, locationName: '' } : photo));
+    setNotice({ kind: 'success', text: `GPS values cleared from ${ids.length} photo${ids.length === 1 ? '' : 's'} in the workspace. Export to write the change to copies.` });
+  };
+
+  const applyTag = () => {
+    if (!tagInput.trim()) return;
+    const ids = selectedIds.length ? selectedIds : active ? [active.id] : [];
+    setPhotos(current => current.map(photo => ids.includes(photo.id) && !photo.tags.includes(tagInput.trim()) ? { ...photo, tags: [...photo.tags, tagInput.trim()] } : photo));
+    setTagInput('');
+    setNotice({ kind: 'success', text: `Tag applied to ${ids.length} selected photo${ids.length === 1 ? '' : 's'}.` });
+  };
+
+  const exportPhotos = async (removeGps = false) => {
+    const targets = selectedPhotos.length ? selectedPhotos : active ? [active] : [];
+    if (!targets.length) { setNotice({ kind: 'info', text: 'Upload and select at least one photo to export.' }); return; }
+    setBusy(true); setNotice(null);
+    const zip = new JSZip();
+    const usedNames = new Set<string>();
+    let success = 0;
+    const failures: string[] = [];
+    try {
+      for (let index = 0; index < targets.length; index++) {
+        const photo = targets[index];
+        setProgress(`Processing ${index + 1} of ${targets.length}: ${photo.name}`);
+        updatePhoto(photo.id, { status: 'processing', error: undefined });
+        try {
+          let blob: Blob = photo.file;
+          let name = photo.name;
+          const isJpeg = photo.file.type === 'image/jpeg' || /\.jpe?g$/i.test(photo.name);
+          const hasStamp = stamp.enabled && showStamped && outputFormat !== 'original';
+          if (hasStamp) {
+            blob = await renderStampedPhoto(photo, stamp, Number(quality) / 100);
+            name = outputName(photo.name, 'stamped');
+          }
+          if (removeGps && isJpeg) {
+            blob = await removeGpsFromJpeg(new File([blob], name, { type: 'image/jpeg' }));
+            name = outputName(photo.name, 'no-gps');
+          } else if (!removeGps && keepExif && isJpeg && typeof photo.latitude === 'number' && typeof photo.longitude === 'number') {
+            blob = await writeGpsToJpeg(new File([blob], name, { type: 'image/jpeg' }), photo.latitude, photo.longitude, photo.altitude);
+            if (hasStamp) name = outputName(photo.name, 'stamped-geotagged');
+            else name = outputName(photo.name, 'geotagged');
+          } else if (!removeGps && (typeof photo.latitude === 'number' || typeof photo.longitude === 'number') && !isJpeg) {
+            throw new Error('GPS writing is currently supported for JPEG only. This file can be previewed, but its GPS metadata was not written.');
+          }
+          if (hasStamp && !keepExif && isJpeg && !removeGps) {
+            // Canvas output is a new image and does not retain EXIF by default; this is expected when Keep EXIF is off.
+          }
+          let finalName = name;
+          let suffix = 2;
+          while (usedNames.has(finalName.toLowerCase())) {
+            finalName = finalName.replace(/\.jpg$/i, `-${suffix++}.jpg`);
+          }
+          usedNames.add(finalName.toLowerCase());
+          if (targets.length === 1) downloadBlob(blob, finalName);
+          else zip.file(finalName, blob);
+          success++;
+          updatePhoto(photo.id, { status: 'done' });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unexpected export error';
+          failures.push(`${photo.name}: ${message}`);
+          updatePhoto(photo.id, { status: 'error', error: message });
+        }
+      }
+      if (targets.length > 1 && success > 0) {
+        setProgress('Preparing ZIP download…');
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        downloadBlob(zipBlob, `geostamp-export-${new Date().toISOString().slice(0, 10)}.zip`);
+      }
+      setNotice({
+        kind: failures.length ? 'error' : 'success',
+        text: `${success} photo${success === 1 ? '' : 's'} exported${failures.length ? `; ${failures.length} failed. ${failures[0]}` : ''}. Original files were not modified.`
+      });
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Export failed.' });
+    } finally { setBusy(false); setProgress(''); }
+  };
+
+  const activePreview = useMemo(() => active?.url, [active?.url]);
+  const onDrop = (event: DragEvent<HTMLDivElement>) => { event.preventDefault(); if (event.dataTransfer.files.length) void addFiles(event.dataTransfer.files); };
+
+  const toolButtons = [
+    { label: 'Upload Photos', icon: Upload, action: () => fileInput.current?.click(), primary: true },
+    { label: 'Capture Location', icon: Crosshair, action: captureLocation },
+    { label: 'Set Location', icon: MapPin, action: () => setTab('Location') },
+    { label: 'Add Tag', icon: Tag, action: () => setTab('Tags') },
+    { label: 'Edit EXIF', icon: FilePenLine, action: () => setTab('EXIF') },
+    { label: 'Add Stamp', icon: Stamp, action: () => setTab('Stamp'), active: tab === 'Stamp' },
+    { label: 'Batch Edit', icon: Layers3, action: () => setNotice({ kind: 'info', text: selectedIds.length > 1 ? `${selectedIds.length} photos selected. Choose a tool, then use Apply to Selected.` : 'Select multiple photos from the gallery to use batch editing.' }) },
+    { label: 'Remove Location', icon: Trash2, action: removeLocationFromSelected, danger: true },
+  ];
+
+  return (
+    <div className="app-shell" onDrop={onDrop} onDragOver={event => event.preventDefault()}>
+      <input ref={fileInput} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif" multiple onChange={event => { if (event.target.files) void addFiles(event.target.files); event.currentTarget.value = ''; }} />
+      <header className="topbar">
+        <a className="brand" href="#" aria-label="GeoStamp home" onClick={event => { event.preventDefault(); setTab('Location'); }}>
+          <span className="brand-mark"><MapPin size={26} fill="currentColor" strokeWidth={2.5} /></span>
+          <span><strong>GeoStamp</strong><small>Edit. Tag. Stamp. Share with Location.</small></span>
+        </a>
+        <div className="ad-slot top-ad"><span className="ad-eyebrow">ADVERTISEMENT</span><strong>Top Banner Ad Space</strong><small>728 × 90 · Reserved placement</small></div>
+        <div className="top-actions">
+          <button className="icon-text subtle-button" onClick={() => setNotice({ kind: 'info', text: 'Tip: select photos, choose a tool, then export new copies. Files are processed in your browser.' })}><HelpCircle size={17} /> <span>Help</span></button>
+          <button className="icon-text subtle-button" onClick={() => setShowSettings(value => !value)}><Settings size={17} /><span>Settings</span></button>
+          <button className="upgrade-button" onClick={() => setNotice({ kind: 'info', text: 'Pro plans are not enabled yet. Core editing is available in this build.' })}><Crown size={16} fill="currentColor" /><span>Upgrade</span></button>
+          <button className="mobile-menu-button" aria-label="Open tools" onClick={() => setMobileMenu(value => !value)}><Menu size={21} /></button>
+        </div>
+      </header>
+
+      <nav className={`toolbar ${mobileMenu ? 'toolbar-open' : ''}`} aria-label="Photo tools">
+        {toolButtons.map((tool, index) => {
+          const Icon = tool.icon;
+          return <button key={tool.label} className={`tool-button ${tool.primary ? 'tool-primary' : ''} ${tool.active ? 'tool-active' : ''} ${tool.danger ? 'tool-danger' : ''}`} onClick={() => { tool.action(); setMobileMenu(false); }}>
+            <Icon size={18} strokeWidth={2.2} /><span>{tool.label}</span>{index === 0 && <span className="mobile-only">＋</span>}
+          </button>;
+        })}
+        <button className="tool-button export-tool" onClick={() => void exportPhotos()}><Download size={18} /><span>Export</span><ChevronDown size={15} /></button>
+      </nav>
+
+      {notice && <div className={`notice notice-${notice.kind}`} role="status">
+        {notice.kind === 'success' ? <CheckCircle2 size={17} /> : notice.kind === 'error' ? <AlertCircle size={17} /> : <Info size={17} />}
+        <span>{notice.text}</span><button aria-label="Dismiss message" onClick={() => setNotice(null)}><X size={16} /></button>
+      </div>}
+
+      {showSettings && <section className="settings-strip"><div><ShieldCheck size={18} /><strong>Privacy-first mode</strong><span>Photos stay in this browser; originals are never overwritten.</span></div><button className="close-settings" onClick={() => setShowSettings(false)}><X size={16} /></button></section>}
+
+      <main className="workspace">
+        <aside className="gallery-panel panel">
+          <div className="panel-heading"><div><h2>Photos <span className="count-pill">{photos.length}</span></h2><p>Select one or more to edit</p></div><button className="text-button" onClick={clearAll} disabled={!photos.length}>Clear all</button></div>
+          <div className="gallery-tabs"><button className="gallery-tab active"><ImageIcon size={15} /> Gallery</button><button className="gallery-tab" onClick={() => setPhotos(current => [...current].sort((a, b) => b.file.lastModified - a.file.lastModified))}>Recent</button></div>
+          <div className="gallery-filter"><Search size={15} /><input aria-label="Filter photos" placeholder="Find a photo…" value={searchTag} onChange={event => setSearchTag(event.target.value)} /><ChevronDown size={14} /></div>
+          {photos.length === 0 ? <button className="upload-dropzone" onClick={() => fileInput.current?.click()}>
+            <span className="upload-icon"><Upload size={22} /></span><strong>Drop photos here</strong><span>or click to browse</span><small>JPG, PNG, WebP, AVIF · Max 40 MB each</small>
+          </button> : <>
+            <div className="gallery-list">
+              {photos.filter(photo => photo.name.toLowerCase().includes(searchTag.toLowerCase())).map(photo => <div key={photo.id} className={`gallery-item ${active?.id === photo.id ? 'gallery-item-active' : ''}`}>
+                <button className={`select-check ${selectedIds.includes(photo.id) ? 'checked' : ''}`} aria-label={`Select ${photo.name}`} onClick={() => toggleSelected(photo.id)}>{selectedIds.includes(photo.id) && <Check size={13} />}</button>
+                <button className="thumb-button" onClick={() => chooseActive(photo)} aria-label={`Preview ${photo.name}`}><img src={photo.url} alt="" /></button>
+                <button className="photo-meta" onClick={() => chooseActive(photo)}><strong title={photo.name}>{photo.name}</strong><span>{formatSize(photo.size)} · {photo.width}×{photo.height}</span>{photo.status === 'error' && <small className="error-text">{photo.error}</small>}</button>
+                <button className="remove-one" aria-label={`Remove ${photo.name}`} onClick={() => removePhoto(photo.id)}><X size={14} /></button>
+              </div>)}
+            </div>
+            <div className="gallery-footer"><span>{selectedIds.length} selected</span><button className="text-button" onClick={() => setSelectedIds(photos.map(photo => photo.id))}>Select all</button></div>
+          </>}
+          <button className="add-more-button" onClick={() => fileInput.current?.click()}><Plus size={16} /> Add photos</button>
+          <div className="privacy-note"><ShieldCheck size={15} /><span>Private by design. Files stay on your device.</span></div>
+        </aside>
+
+        <section className="preview-column">
+          <div className="preview-card panel">
+            <div className="preview-toolbar">
+              <div className="zoom-controls"><button aria-label="Zoom out" onClick={() => setZoom(value => Math.max(25, value - 10))}><Minus size={15} /></button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(value => Math.min(150, value + 10))}><Plus size={15} /></button></div>
+              <button className="square-control" onClick={() => setZoom(70)} title="Fit to view"><Maximize size={16} /></button>
+              <button className="square-control" onClick={() => setShowStamped(value => !value)} title="Toggle stamp preview"><RotateCcw size={16} /></button>
+              <div className="preview-mode"><button className={!showStamped ? 'selected' : ''} onClick={() => setShowStamped(false)}>Original</button><button className={showStamped ? 'selected' : ''} onClick={() => setShowStamped(true)}>Preview</button></div>
+            </div>
+            <div className="image-stage">
+              {active && activePreview ? <div className="image-frame">
+                <img src={activePreview} alt={active.name} style={{ transform: `scale(${zoom / 70})` }} />
+                {showStamped && stamp.enabled && <div className={`stamp-preview stamp-${stamp.position} stamp-${stamp.style}`} style={{ opacity: stamp.opacity / 100, color: stamp.color, backgroundColor: stamp.style === 'minimal' ? 'transparent' : stamp.background }}>
+                  {stamp.showLocation && active.locationName && <strong><MapPin size={15} fill="currentColor" />{active.locationName}</strong>}
+                  {stamp.showDate && active.dateTime && <span><CalendarDays size={13} />{new Date(active.dateTime).toLocaleString()}</span>}
+                  {stamp.showCoordinates && typeof active.latitude === 'number' && typeof active.longitude === 'number' && <span>{active.latitude.toFixed(5)}°, {active.longitude.toFixed(5)}°</span>}
+                  {stamp.customText && <span>{stamp.customText}</span>}
+                </div>}
+                <span className="preview-chip"><CheckCircle2 size={13} /> Preview</span>
+              </div> : <button className="empty-preview" onClick={() => fileInput.current?.click()}><ImageIcon size={38} /><strong>Your photo will appear here</strong><span>Upload a photo to start editing</span><span className="empty-upload-cta"><Upload size={15} /> Upload photos</span></button>}
+            </div>
+            <div className="preview-bottom">
+              <div className="photo-position"><button disabled={photos.length < 2} aria-label="Previous photo" onClick={() => { const index = photos.findIndex(photo => photo.id === active?.id); setActiveId(photos[(index - 1 + photos.length) % photos.length]?.id ?? null); }}><ChevronLeft size={18} /></button><span>{active ? photos.findIndex(photo => photo.id === active.id) + 1 : 0} / {photos.length}</span><button disabled={photos.length < 2} aria-label="Next photo" onClick={() => { const index = photos.findIndex(photo => photo.id === active?.id); setActiveId(photos[(index + 1) % photos.length]?.id ?? null); }}><ChevronRight size={18} /></button></div>
+              <span className="dimensions-label">{active ? `${active.width} × ${active.height} px` : 'No photo selected'}</span>
+              <button className="subtle-button" onClick={() => setTab('Stamp')}><Stamp size={15} /> Edit stamp</button>
+            </div>
+          </div>
+          <div className="in-content-ad ad-slot"><span className="ad-eyebrow">ADVERTISEMENT</span><ImageIcon size={22} /><strong>In-content ad space</strong><span>970 × 180 · Below the editing workspace</span></div>
+          <div className="workflow-tip"><Info size={16} /><span><strong>Quick tip:</strong> Select several photos in the gallery to apply the same location or stamp in one go.</span></div>
+        </section>
+
+        <aside className="editor-column panel">
+          <div className="editor-tabs" role="tablist" aria-label="Editing panels">
+            {(['Location', 'Stamp', 'EXIF', 'Tags'] as EditorTab[]).map(value => <button key={value} role="tab" aria-selected={tab === value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}>{value === 'Location' ? <MapPin size={15} /> : value === 'Stamp' ? <Stamp size={15} /> : value === 'EXIF' ? <FilePenLine size={15} /> : <Tag size={15} />}{value}</button>)}
+          </div>
+          {!active ? <div className="editor-empty"><SlidersHorizontal size={26} /><strong>Editing tools</strong><span>Upload a photo to unlock location, stamp, EXIF and tag settings.</span><button className="primary-button" onClick={() => fileInput.current?.click()}><Upload size={16} /> Upload Photos</button></div> :
+            <>
+              {tab === 'Location' && <div className="editor-content">
+                <div className="section-title"><div><MapPin size={17} /><strong>GPS location</strong></div><button className="small-green-button" onClick={captureLocation} disabled={busy}><Crosshair size={14} /> Capture</button></div>
+                <p className="field-help">Enter coordinates manually or capture your current position. No map needed.</p>
+                <div className="field-grid two">
+                  <label>Latitude<input type="number" min="-90" max="90" step="any" placeholder="e.g. 19.0760" value={active.latitude ?? ''} onChange={event => updatePhoto(active.id, { latitude: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
+                  <label>Longitude<input type="number" min="-180" max="180" step="any" placeholder="e.g. 72.8777" value={active.longitude ?? ''} onChange={event => updatePhoto(active.id, { longitude: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
+                </div>
+                <label className="field-label">Altitude (metres)<input type="number" step="any" placeholder="Optional" value={active.altitude ?? ''} onChange={event => updatePhoto(active.id, { altitude: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
+                <label className="field-label">Location name <span>Optional</span><input placeholder="e.g. Marine Drive, Mumbai" value={active.locationName} onChange={event => updatePhoto(active.id, { locationName: event.target.value })} /></label>
+                <label className="field-label">Capture date & time <span>Optional</span><input type="datetime-local" value={active.dateTime} onChange={event => updatePhoto(active.id, { dateTime: event.target.value })} /></label>
+                <div className="location-summary"><MapPin size={16} /><div><strong>{active.locationName || 'Location not named'}</strong><span>{typeof active.latitude === 'number' && typeof active.longitude === 'number' ? `${active.latitude.toFixed(5)}, ${active.longitude.toFixed(5)}` : 'No GPS coordinates set'}</span></div><span className={typeof active.latitude === 'number' && typeof active.longitude === 'number' ? 'status-good' : 'status-muted'}>{typeof active.latitude === 'number' && typeof active.longitude === 'number' ? 'Set' : 'Missing'}</span></div>
+                <div className="button-row"><button className="primary-button" onClick={applyLocationToSelected}><Check size={16} /> Apply to selected</button><button className="secondary-button" onClick={removeLocationFromSelected}><Trash2 size={15} /> Remove GPS</button></div>
+              </div>}
+              {tab === 'Stamp' && <div className="editor-content">
+                <div className="section-title"><div><Stamp size={17} /><strong>Photo stamp</strong></div><label className="switch"><input type="checkbox" checked={stamp.enabled} onChange={event => setStamp(current => ({ ...current, enabled: event.target.checked }))} /><span /></label></div>
+                <p className="field-help">Add a visible overlay to the exported image. This changes the photo pixels.</p>
+                <div className="stamp-toggles">
+                  <label><input type="checkbox" checked={stamp.showLocation} onChange={event => setStamp(current => ({ ...current, showLocation: event.target.checked }))} /> Location name</label>
+                  <label><input type="checkbox" checked={stamp.showDate} onChange={event => setStamp(current => ({ ...current, showDate: event.target.checked }))} /> Date & time</label>
+                  <label><input type="checkbox" checked={stamp.showCoordinates} onChange={event => setStamp(current => ({ ...current, showCoordinates: event.target.checked }))} /> GPS coordinates</label>
+                </div>
+                <label className="field-label">Custom text <span>Optional</span><input placeholder="e.g. Summer trip 2026" value={stamp.customText} onChange={event => setStamp(current => ({ ...current, customText: event.target.value }))} /></label>
+                <label className="field-label">Template<select value={stamp.style} onChange={event => setStamp(current => ({ ...current, style: event.target.value as StampSettings['style'] }))}><option value="classic">Classic · dark translucent</option><option value="minimal">Minimal · text only</option><option value="travel">Travel · bold label</option></select></label>
+                <label className="field-label">Position<select value={stamp.position} onChange={event => setStamp(current => ({ ...current, position: event.target.value as StampSettings['position'] }))}><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option></select></label>
+                <div className="field-grid two">
+                  <label>Text color<input type="color" value={stamp.color} onChange={event => setStamp(current => ({ ...current, color: event.target.value }))} /></label>
+                  <label>Background<input type="color" value={stamp.background} onChange={event => setStamp(current => ({ ...current, background: event.target.value }))} /></label>
+                </div>
+                <label className="field-label">Opacity <span>{stamp.opacity}%</span><input type="range" min="20" max="100" value={stamp.opacity} onChange={event => setStamp(current => ({ ...current, opacity: Number(event.target.value) }))} /></label>
+                <button className="primary-button full-button" onClick={() => { setShowStamped(true); setNotice({ kind: 'success', text: 'Stamp preview updated. Export to apply it to a new photo copy.' }); }}><Stamp size={16} /> Update preview</button>
+              </div>}
+              {tab === 'EXIF' && <div className="editor-content">
+                <div className="section-title"><div><FilePenLine size={17} /><strong>Photo metadata</strong></div><span className="read-only-badge">Inspector</span></div>
+                <p className="field-help">Metadata is read from the selected file. GPS can be edited in Location. Writing GPS is currently supported for JPEG.</p>
+                <div className="metadata-list">
+                  <div><span>File name</span><strong title={active.name}>{active.name}</strong></div>
+                  <div><span>File size</span><strong>{formatSize(active.size)}</strong></div>
+                  <div><span>Dimensions</span><strong>{active.width} × {active.height}</strong></div>
+                  <div><span>File type</span><strong>{active.file.type || 'Unknown'}</strong></div>
+                  <div><span>GPS latitude</span><strong>{active.latitude ?? 'Not present'}</strong></div>
+                  <div><span>GPS longitude</span><strong>{active.longitude ?? 'Not present'}</strong></div>
+                  <div><span>Capture date</span><strong>{active.dateTime ? new Date(active.dateTime).toLocaleString() : 'Not present'}</strong></div>
+                  <div><span>Workspace status</span><strong className={`status-${active.status}`}>{active.status}</strong></div>
+                </div>
+                <div className="warning-note"><AlertCircle size={16} /><span>Canvas stamping re-encodes pixels and may remove existing metadata. Keep EXIF is applied only where this build can safely preserve or write supported fields.</span></div>
+                <label className="check-row"><input type="checkbox" checked={keepExif} onChange={event => setKeepExif(event.target.checked)} /> Keep supported EXIF data</label>
+                <button className="secondary-button full-button" onClick={() => setNotice({ kind: 'info', text: 'The metadata inspector shows fields this build can read. Only GPS writing/removal for JPEG is implemented; other EXIF fields remain read-only.' })}><Info size={15} /> Metadata support details</button>
+              </div>}
+              {tab === 'Tags' && <div className="editor-content">
+                <div className="section-title"><div><Tag size={17} /><strong>Photo tags</strong></div><span className="count-pill">{active.tags.length}</span></div>
+                <p className="field-help">Organize photos with labels in this workspace. Tags are app-side labels and are not written into EXIF yet.</p>
+                <div className="tag-entry"><input placeholder="Add a tag…" value={tagInput} onChange={event => setTagInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') applyTag(); }} /><button aria-label="Apply tag" onClick={applyTag} disabled={!tagInput.trim()}><Plus size={17} /></button></div>
+                {active.tags.length ? <div className="tag-list">{active.tags.map(tag => <span key={tag} className="tag-chip">{tag}<button aria-label={`Remove tag ${tag}`} onClick={() => updatePhoto(active.id, { tags: active.tags.filter(value => value !== tag) })}><X size={12} /></button></span>)}</div> : <div className="tags-empty"><Tag size={23} /><strong>No tags yet</strong><span>Add tags to organize your selected photos.</span></div>}
+                <button className="secondary-button full-button" onClick={() => { setTagInput(''); setNotice({ kind: 'info', text: 'Tags currently stay in the GeoStamp workspace and are not embedded into exported file metadata.' }); }}>About tags</button>
+              </div>}
+            </>
+          }
+          <div className="side-ad ad-slot"><span className="ad-eyebrow">ADVERTISEMENT</span><ImageIcon size={24} /><strong>Side ad space</strong><span>300 × 600</span><small>Reserved for an ad provider</small></div>
+        </aside>
+      </main>
+
+      <footer className="export-bar">
+        <div className="selection-status"><CheckCircle2 size={19} /><div><strong>{selectedIds.length} selected</strong><span>{selectedIds.length ? formatSize(totalSize) + ' total' : 'Choose photos to export'}</span></div></div>
+        <div className="export-options">
+          <label>Format<select value={outputFormat} onChange={event => setOutputFormat(event.target.value)}><option value="jpg">JPEG</option><option value="original">Keep original (no stamp)</option></select></label>
+          <label className="quality-control">JPEG quality<select value={quality} onChange={event => setQuality(event.target.value)}><option value="75">75%</option><option value="85">85%</option><option value="90">90%</option><option value="95">95%</option></select></label>
+          <label className="check-row keep-exif"><input type="checkbox" checked={keepExif} onChange={event => setKeepExif(event.target.checked)} /> Keep EXIF</label>
+          <label className="check-row stamp-toggle"><input type="checkbox" checked={stamp.enabled && showStamped} onChange={event => { setStamp(current => ({ ...current, enabled: event.target.checked })); setShowStamped(event.target.checked); }} /> Add stamp</label>
+        </div>
+        <button className="download-button" disabled={!photos.length || busy} onClick={() => void exportPhotos()}>{busy ? <LoaderCircle className="spin" size={18} /> : <Download size={19} />}<span>{busy ? progress || 'Working…' : `Download ${selectedPhotos.length || (active ? 1 : 0)} photo${(selectedPhotos.length || (active ? 1 : 0)) === 1 ? '' : 's'}`}</span></button>
+      </footer>
+      {busy && <div className="busy-progress" role="status"><LoaderCircle size={16} className="spin" />{progress || 'Processing photos locally…'}</div>}
+      <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+        <button className="active" onClick={() => fileInput.current?.click()}><ImageIcon size={18} /><span>Photos</span></button>
+        <button onClick={() => setTab('Location')}><MapPin size={18} /><span>Location</span></button>
+        <button className="mobile-download" disabled={!photos.length || busy} onClick={() => void exportPhotos()}><Download size={19} /></button>
+        <button onClick={() => setTab('Stamp')}><Stamp size={18} /><span>Stamp</span></button>
+        <button onClick={() => setTab('EXIF')}><Settings size={18} /><span>Details</span></button>
+      </nav>
+      <div className="footer-note"><span><ShieldCheck size={14} /> Your photos stay on your device</span><span>GeoStamp · Built for privacy</span><button onClick={() => setNotice({ kind: 'info', text: 'This build has no photo upload backend. Geolocation is requested only when you click Capture Location.' })}>Privacy & support</button></div>
+    </div>
+  );
 }

@@ -2,55 +2,44 @@
 
 **Edit. Tag. Stamp. Share with Location.**
 
-GeoStamp is a responsive, privacy-first photo location editor. It includes a desktop gallery, mobile-friendly photo selection, GPS coordinate editing, EXIF inspection, visible photo stamps, batch actions and export—all without a map in the editor.
+GeoStamp is a responsive, privacy-conscious photo GPS and EXIF editor with a visible photo-stamp designer. The initial application is designed to run in the browser and process selected photos locally wherever possible.
 
 ## Features
+- Responsive desktop and mobile interface, with a PWA manifest.
+- Explicit photo selection, thumbnail gallery, multi-select, preview and zoom.
+- Read supported EXIF/GPS metadata.
+- Set GPS from browser geolocation (with permission) or manually entered coordinates.
+- Write or remove GPS metadata in JPEG files.
+- Create visible location/date/coordinate/custom-text stamps.
+- Batch apply actions and export copies as ZIP.
+- Reserved ad placements that never cover the editor or download controls.
+- No map in the editing interface.
 
-- Responsive desktop, tablet and mobile UI with a PWA manifest.
-- Upload or drag-and-drop JPEG, PNG, WebP and AVIF images (50 MB per file limit).
-- Gallery thumbnails, search, selection, multi-select and file removal.
-- Preview, zoom, navigation and original-file safety indicator.
-- Read common EXIF metadata where available.
-- Manually edit latitude, longitude and altitude; capture current location only after a user action and browser permission.
-- Write/remove supported GPS and date EXIF fields for JPEG exports.
-- Visible location/date/coordinate stamp rendering and batch ZIP export.
-- EXIF toggle, JPEG quality selector, reserved ad placements and privacy information.
-
-## Important limitations
-
-- JPEG is the only format intended for EXIF GPS writing. PNG/WebP/AVIF can be previewed, but reliable metadata writing/preservation is not promised.
-- Canvas stamping re-encodes images and may strip existing metadata. Inspect exported files before relying on metadata for legal or evidentiary workflows.
-- Tags are session labels, not guaranteed embedded image keywords. Place/address search is not enabled. No map UI is included.
-- The app does not upload photos in this release. Ad placements are visual placeholders, not a live ad network integration.
-- The PWA manifest is included; offline support and native Android/iOS packaging need further testing/work.
-
-## Requirements and local development
-
-Node.js 20+ recommended.
+## Run locally
+Requires Node.js 20 or newer.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Use the local URL printed by Vite. Browser geolocation requires HTTPS or localhost and explicit permission.
-
-## Quality checks
-
+## Verify
 ```bash
 npm run typecheck
-npm run lint
 npm test
 npm run build
-npm run preview
 ```
 
-GitHub Actions runs type-checking, lint, tests and production build on pushes and pull requests to `main`.
+## Supported format scope
+The first release focuses on JPEG metadata writing. PNG/WebP and other image types may be previewed and stamped through canvas, but canvas re-encoding does not preserve their original EXIF metadata. The app should explain this before export. HEIC/RAW/TIFF/video metadata writing is not claimed.
 
-## Deployment
+## Privacy
+Photos are selected by the user and processed in the browser. Current location is requested only after the user chooses Capture Location. If optional reverse geocoding is added, disclose the provider and the location data sent to it. This initial version does not upload photos to a GeoStamp server.
 
-Static Vite app; deploy to Cloudflare Pages, Vercel, Netlify or GitHub Pages. Build command: `npm run build`; output directory: `dist`. Use HTTPS. Never place private API keys in frontend code.
+## Project docs
+- `docs/ROADMAP.md` — milestones and acceptance criteria
+- `docs/ARCHITECTURE.md` — architecture and design decisions
+- `docs/TESTING.md` — test strategy and release checks
 
-See [the roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), [testing strategy](docs/TESTING.md), [privacy notes](docs/PRIVACY.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
-
-No open-source license has been selected; all rights reserved unless a license is added by the repository owner.
+## Important limitations
+Browser geolocation requires a secure context (HTTPS or localhost) and user permission. Actual EXIF preservation varies by file type and browser library support. Verify exported files with a metadata reader before treating the result as production-ready.
