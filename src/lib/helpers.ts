@@ -1,0 +1,3 @@
+export function formatBytes(n:number):string { if(!n)return '0 B'; const units=['B','KB','MB','GB']; const i=Math.min(Math.floor(Math.log(n)/Math.log(1024)),units.length-1); return `${(n/1024**i).toFixed(i?1:0)} ${units[i]}`; }
+export function outputName(name:string,stamped:boolean):string { const base=name.replace(/\\.[^.]+$/,''); const ext=name.match(/\\.[^.]+$/)?.[0]||'.img'; return base+'-geostamp'+(stamped?'-stamped':'')+(stamped||/\\.jpe?g$/i.test(name)?'.jpg':ext); }
+export function localDateTime(value:string):string { if(!value)return ''; const d=new Date(value); if(Number.isNaN(d.getTime()))return ''; const p=(n:number)=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
