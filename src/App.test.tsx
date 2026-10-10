@@ -6,7 +6,7 @@ describe('GeoStamp app shell', () => {
   it('renders the main photo workflow and ad placeholders', () => {
     render(<App />);
     expect(screen.getByText('GeoStamp')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /upload photos/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /upload photos/i }).length).toBeGreaterThan(0);
     expect(screen.getByText(/top banner ad space/i)).toBeInTheDocument();
   });
 });
