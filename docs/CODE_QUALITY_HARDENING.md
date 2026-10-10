@@ -11,8 +11,8 @@ This pass targets low-risk correctness and configuration improvements. It intent
 - Added regression tests for normal coordinates, boundary rounding, and non-finite values.
 
 ## Verification status
-- Regression tests are added but must be executed by CI; this GitHub integration does not execute the repository's Node test suite directly.
-- The branch should not be merged until the CI typecheck, test, and production-build jobs pass.
+- GitHub Actions passed `npm run typecheck`, `npm test`, and `npm run build` on the reviewed PR head (`2bf3519c30cf114ef7940f77d96f4e402fe386e9`).
+- The post-merge `main` workflow is triggered separately; its result should also be checked before treating the release as fully verified.
 
 ## Follow-up priorities
 0. Review the six dependency vulnerabilities reported during CI install (3 moderate, 1 high, 2 critical); inspect the affected dependency paths and apply compatible updates before production. Avoid blind `npm audit fix --force` because it can introduce breaking changes.
