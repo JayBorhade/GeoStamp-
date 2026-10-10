@@ -110,7 +110,7 @@ function loadExifOrEmpty(dataUrl: string): Record<string, unknown> {
     // remain an actionable error instead of silently discarding metadata.
     const encoded = dataUrl.slice(dataUrl.indexOf(',') + 1);
     const binary = atob(encoded);
-    if (binary.includes('Exif\\u0000\\u0000')) {
+    if (binary.includes('Exif\u0000\u0000')) {
       throw new Error('This JPEG contains unreadable EXIF metadata. Try exporting without Keep EXIF.');
     }
     try {
