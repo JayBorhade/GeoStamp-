@@ -4,8 +4,8 @@
 This pass targets low-risk correctness and configuration improvements. It intentionally avoids rewriting the application shell or changing product behavior in bulk.
 
 ## Changes in this branch
-- Consolidated Vite/Vitest configuration into one typed configuration, removing the `as any` escape hatch and eliminating the duplicate Vitest config.
-- Corrected the test setup path to the setup file that exists in the repository.
+- Separated responsibilities between Vite and Vitest configs, removed the `as any` escape hatch, and retained a dedicated Vitest config to avoid incompatible duplicate Vite type definitions.
+- Configured Vitest to use the dedicated Vitest matcher setup file.
 - Hardened decimal-degree to EXIF DMS conversion by rounding integer units once and carrying overflow across minute/degree boundaries.
 - Added a shared empty-EXIF fallback for JPEGs that legitimately contain no EXIF segment, while keeping malformed EXIF errors explicit.
 - Added regression tests for normal coordinates, boundary rounding, and non-finite values.
