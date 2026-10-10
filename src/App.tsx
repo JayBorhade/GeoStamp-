@@ -137,8 +137,8 @@ export default function App() {
   };
 
   const applyLocationToSelected = () => {
-    if (!active || typeof active.latitude !== 'number' || typeof active.longitude !== 'number') {
-      setNotice({ kind: 'error', text: 'Enter a valid latitude and longitude first.' }); return;
+    if (!active || typeof active.latitude !== 'number' || typeof active.longitude !== 'number' || !Number.isFinite(active.latitude) || !Number.isFinite(active.longitude) || active.latitude < -90 || active.latitude > 90 || active.longitude < -180 || active.longitude > 180) {
+      setNotice({ kind: 'error', text: 'Enter valid coordinates: latitude −90 to 90 and longitude −180 to 180.' }); return;
     }
     const ids = selectedIds.length ? selectedIds : [active.id];
     setPhotos(current => current.map(photo => ids.includes(photo.id) ? {
@@ -185,11 +185,13 @@ export default function App() {
             if (keepExif && isJpeg) blob = await preserveExifOnJpeg(photo.file, blob);
             name = outputName(photo.name, 'stamped');
           }
+          if (typeof photo.latitude === 'number' && (photo.latitude < -90 || photo.latitude > 90 || !Number.isFinite(photo.latitude))) throw new Error('Latitude must be between −90 and 90 degrees.');
+          if (typeof photo.longitude === 'number' && (photo.longitude < -180 || photo.longitude > 180 || !Number.isFinite(photo.longitude))) throw new Error('Longitude must be between −180 and 180 degrees.');
           if ((removeGps || photo.removeGps) && !isJpeg) throw new Error('GPS metadata removal is supported for JPEG files only. This file was not changed.');
           if ((removeGps || photo.removeGps) && isJpeg) {
             blob = await removeGpsFromJpeg(new File([blob], name, { type: 'image/jpeg' }));
             name = outputName(photo.name, 'no-gps');
-          } else if (!removeGps && keepExif && isJpeg && typeof photo.latitude === 'number' && typeof photo.longitude === 'number') {
+          } else if (!removeGps && !photo.removeGps && isJpeg && typeof photo.latitude === 'number' && typeof photo.longitude === 'number') {
             blob = await writeGpsToJpeg(new File([blob], name, { type: 'image/jpeg' }), photo.latitude, photo.longitude, photo.altitude);
             if (hasStamp) name = outputName(photo.name, 'stamped-geotagged');
             else name = outputName(photo.name, 'geotagged');

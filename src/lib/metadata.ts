@@ -59,6 +59,8 @@ export async function preserveExifOnJpeg(original: File, rendered: Blob): Promis
 }
 
 export async function writeGpsToJpeg(file: File, latitude: number, longitude: number, altitude?: number): Promise<Blob> {
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new Error('Latitude must be between −90 and 90 degrees.');
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new Error('Longitude must be between −180 and 180 degrees.');
   if (!file.type.toLowerCase().includes('jpeg') && !file.name.toLowerCase().match(/\.jpe?g$/)) {
     throw new Error('GPS metadata writing currently supports JPEG files only. Export a JPEG to continue.');
   }
