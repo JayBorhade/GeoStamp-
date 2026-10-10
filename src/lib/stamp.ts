@@ -1,5 +1,18 @@
 import type { StampSettings, PhotoItem } from '../types';
 
+export async function convertPhotoToJpeg(photo: PhotoItem, quality = 0.92): Promise<Blob> {
+  const image = await loadImage(photo.url);
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth || photo.width;
+  canvas.height = image.naturalHeight || photo.height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Your browser could not create an image canvas.');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not convert photo to JPEG.')), 'image/jpeg', Math.min(1, Math.max(0.5, quality))));
+}
+
 export async function renderStampedPhoto(photo: PhotoItem, settings: StampSettings, quality = 0.92): Promise<Blob> {
   const image = await loadImage(photo.url);
   const canvas = document.createElement('canvas');

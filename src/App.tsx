@@ -9,7 +9,7 @@ import {
 import JSZip from 'jszip';
 import type { PhotoItem, EditorTab, StampSettings } from './types';
 import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg, preserveExifOnJpeg, type ReadMetadata } from './lib/metadata';
-import { renderStampedPhoto } from './lib/stamp';
+import { renderStampedPhoto, convertPhotoToJpeg } from './lib/stamp';
 
 const MAX_FILE_MB = 40;
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
@@ -184,6 +184,9 @@ export default function App() {
             blob = await renderStampedPhoto(photo, stamp, Number(quality) / 100);
             if (keepExif && isJpeg) blob = await preserveExifOnJpeg(photo.file, blob);
             name = outputName(photo.name, 'stamped');
+          } else if (outputFormat === 'jpg' && !isJpeg) {
+            blob = await convertPhotoToJpeg(photo, Number(quality) / 100);
+            name = outputName(photo.name, 'converted');
           }
           if (typeof photo.latitude === 'number' && (photo.latitude < -90 || photo.latitude > 90 || !Number.isFinite(photo.latitude))) throw new Error('Latitude must be between −90 and 90 degrees.');
           if (typeof photo.longitude === 'number' && (photo.longitude < -180 || photo.longitude > 180 || !Number.isFinite(photo.longitude))) throw new Error('Longitude must be between −180 and 180 degrees.');
