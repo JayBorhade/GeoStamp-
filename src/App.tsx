@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import type { PhotoItem, EditorTab, StampSettings } from './types';
-import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg, preserveExifOnJpeg } from './lib/metadata';
+import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg, preserveExifOnJpeg, type ReadMetadata } from './lib/metadata';
 import { renderStampedPhoto } from './lib/stamp';
 
 const MAX_FILE_MB = 40;
@@ -82,7 +82,7 @@ export default function App() {
           image.onerror = () => reject(new Error('Could not decode image'));
           image.src = url;
         });
-        const metadata = await readMetadata(file).catch(() => ({}));
+        const metadata = await readMetadata(file).catch((): ReadMetadata => ({}));
         next.push({
           id: id(), file, url, name: file.name, size: file.size,
           width: dimensions.width, height: dimensions.height,

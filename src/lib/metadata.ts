@@ -12,7 +12,7 @@ export interface ReadMetadata {
 }
 
 export async function readMetadata(file: File): Promise<ReadMetadata> {
-  const parsed = await exifr.parse(file, { gps: true, exif: true, tiff: true, ifd0: true }).catch(() => null);
+  const parsed = await exifr.parse(file, { gps: true, exif: true, tiff: true }).catch(() => null);
   if (!parsed) return {};
   const date = parsed.DateTimeOriginal ?? parsed.CreateDate ?? parsed.ModifyDate;
   let dateTime = '';
