@@ -53,7 +53,7 @@ export async function preserveExifOnJpeg(original: File, rendered: Blob): Promis
   const exif = piexif.load(originalData) as unknown as Record<string, unknown>;
   const ifd0 = (exif['0th'] ?? {}) as Record<string | number, unknown>;
   // The rendered pixels are already oriented by the browser; reset EXIF orientation to avoid a second rotation.
-  ifd0[piexif.ImageIFD.Orientation] = 1;
+  ifd0[274] = 1;
   exif['0th'] = ifd0;
   return dataUrlToBlob(piexif.insert(piexif.dump(exif as never), renderedData));
 }
