@@ -30,7 +30,7 @@ async function renderExport(p:Photo,keep:boolean,stamp:boolean,quality:number):P
  let ex:Record<string,Record<number,unknown>>;try{ex=piexif.load(url) as unknown as Record<string,Record<number,unknown>>;}catch{ex={'0th':{},Exif:{},GPS:{},'1st':{},thumbnail:{}};}
  if(!keep){ex['0th']={};ex.Exif={};ex.GPS={};ex['1st']={};ex.thumbnail={};}
  ex.GPS={};if(lat!==undefined&&lon!==undefined){ex.GPS[piexif.GPSIFD.GPSLatitudeRef]=lat<0?'S':'N';ex.GPS[piexif.GPSIFD.GPSLatitude]=gpsDms(lat);ex.GPS[piexif.GPSIFD.GPSLongitudeRef]=lon<0?'W':'E';ex.GPS[piexif.GPSIFD.GPSLongitude]=gpsDms(lon);const alt=p.altitude.trim()?Number(p.altitude):undefined;if(alt!==undefined&&Number.isFinite(alt)){ex.GPS[piexif.GPSIFD.GPSAltitudeRef]=alt<0?1:0;ex.GPS[piexif.GPSIFD.GPSAltitude]=[Math.round(Math.abs(alt)*100),100];}ex.GPS[piexif.GPSIFD.GPSVersionID]=[2,3,0,0];}
- const date=parseDate(p.dateTime);if(date)ex.Exif[piexif.ExifIFD.DateTimeOriginal]=date;
+ const date=parseDate(p.dateTime);if(date&&keep)ex.Exif[piexif.ExifIFD.DateTimeOriginal]=date;
  try{return dataBlob(piexif.insert(piexif.dump(ex as never),url));}catch{throw new Error('This JPEG could not be rewritten safely. Try another JPEG file.');}
 }
 
