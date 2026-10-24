@@ -212,7 +212,7 @@ export default function App() {
           } else if (!removeGps && (typeof photo.latitude === 'number' || typeof photo.longitude === 'number') && !isJpeg) {
             throw new Error('GPS writing is currently supported for JPEG only. This file can be previewed, but its GPS metadata was not written.');
           }
-          if (hasStamp && !keepExif && isJpeg && !removeGps) {
+          if (hasStamp && !keepExif && sourceIsJpeg && !removeGps) {
             // Canvas output is a new image and does not retain EXIF by default; this is expected when Keep EXIF is off.
           }
           let finalName = name;
