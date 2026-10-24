@@ -25,7 +25,7 @@ npm run dev
 
 ## Deployment
 
-The project includes a Vercel configuration and a small same-origin service worker for caching the app shell and visited static assets. Deploy over HTTPS for browser geolocation and installability. Verify the installed experience on target browsers before launch.
+The project includes a Vercel configuration and a small same-origin service worker for caching the app shell and visited static assets. The Vercel file is deployment configuration, not proof that a Vercel project is linked. For GitHub Pages, first open repository **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**; the workflow deliberately does not try to enable Pages automatically because that requires an elevated token not available to the normal workflow token. A push to `main` then builds and deploys the site. Deploy over HTTPS for browser geolocation and installability, and verify the installed experience on target browsers before launch.
 
 ## Verify
 ```bash
