@@ -41,5 +41,30 @@ jobs:
         run: npm run lint
       - name: Unit tests
         run: npm test
-      - name: Production build
+      - name: Production build (root base)
+        env:
+          GITHUB_ACTIONS: 'false'
         run: npm run build
+      - name: Verify GitHub Pages build paths
+        env:
+          GITHUB_ACTIONS: 'true'
+        shell: bash
+        run: |
+          npm run build
+          node --input-type=module <<'NODE'
+          import { readFileSync, existsSync } from 'node:fs';
+          const html = readFileSync('dist/index.html', 'utf8');
+          const required = ['/GeoStamp-/assets/', '/GeoStamp-/manifest.webmanifest', '/GeoStamp-/geostamp.svg'];
+          for (const value of required) {
+            if (!html.includes(value)) {
+              console.error(`Missing GitHub Pages base-path reference: ${value}`);
+              process.exitCode = 1;
+            }
+          }
+          for (const file of ['dist/manifest.webmanifest', 'dist/geostamp.svg', 'dist/sw.js']) {
+            if (!existsSync(file)) {
+              console.error(`Missing required PWA asset: ${file}`);
+              process.exitCode = 1;
+            }
+          }
+          NODE
