@@ -29,7 +29,7 @@ describe('JPEG EXIF round-trip', () => {
     expect(parsed?.latitude).toBeCloseTo(-33.8688, 4);
     expect(parsed?.longitude).toBeCloseTo(151.2093, 4);
     expect(parsed?.GPSAltitude).toBeCloseTo(12.5, 1);
-    expect(parsed?.GPSAltitudeRef).toBe(1);
+    expect(Array.from(parsed?.GPSAltitudeRef ?? [])).toEqual([1]);
   });
 
   it('removes GPS metadata from a JPEG copy', async () => {
@@ -63,7 +63,7 @@ describe('JPEG EXIF round-trip', () => {
 
     expect(parsed?.latitude).toBeCloseTo(19.076, 4);
     expect(parsed?.longitude).toBeCloseTo(72.8777, 4);
-    expect(parsed?.Orientation).toBe(1);
+    expect(parsed?.Orientation).toBe('Horizontal (normal)');
   });
 
   it('rejects invalid GPS coordinates before modifying the file', async () => {
