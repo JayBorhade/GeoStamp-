@@ -11,6 +11,7 @@
 - [x] `package-lock.json` is committed and CI/deployment use `npm ci`.
 
 ## Security and privacy
+- [ ] Configure GitHub Pages source as GitHub Actions (or link the repository to the intended Vercel project).
 - [ ] Confirm HTTPS and inspect deployed response headers.
 - [ ] Confirm CSP permits only the origins required by the shipped app.
 - [ ] Confirm photos are processed locally and no unapproved network requests transmit images or location.
