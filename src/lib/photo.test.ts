@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, localDateTime, outputName } from './helpers';
+import { formatBytes, localDateTime, outputName, safeFileStem } from './helpers';
 import { toDms } from './metadata';
 
 describe('photo helpers', () => {
@@ -17,6 +17,8 @@ describe('photo helpers', () => {
     expect(outputName('image.png', false)).toBe('image-geostamp.png');
     expect(outputName('image.jpg', false)).toBe('image-geostamp.jpg');
     expect(outputName('../folder\\photo.png', false)).toBe('folder_photo-geostamp.png');
+    expect(safeFileStem('../folder\\photo.png')).toBe('folder_photo');
+    expect(safeFileStem('')).toBe('photo');
   });
 
   it('formats valid local datetime values and rejects invalid ones', () => {

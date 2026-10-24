@@ -10,6 +10,7 @@ import JSZip from 'jszip';
 import type { PhotoItem, EditorTab, StampSettings } from './types';
 import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg, preserveExifOnJpeg, type ReadMetadata } from './lib/metadata';
 import { renderStampedPhoto, convertPhotoToJpeg } from './lib/stamp';
+import { safeFileStem } from './lib/helpers';
 
 const MAX_FILE_MB = 40;
 const MAX_PHOTOS = 50;
@@ -32,10 +33,8 @@ function downloadBlob(blob: Blob, name: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function outputName(name: string, suffix: string) {
-  const stem = name.replace(/\.[^.]+$/, '');
-  return `${stem}-${suffix}.jpg`;
+  return `${safeFileStem(name)}-${suffix}.jpg`;
 }
-
 export default function App() {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
