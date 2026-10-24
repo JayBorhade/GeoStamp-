@@ -17,6 +17,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Generate dependency lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Upload lockfile bootstrap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geostamp-lockfile-bootstrap
+          path: package-lock.json
+          retention-days: 1
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Type check
