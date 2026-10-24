@@ -184,25 +184,28 @@ export default function App() {
         try {
           let blob: Blob = photo.file;
           let name = photo.name;
-          const isJpeg = photo.file.type === 'image/jpeg' || /\.jpe?g$/i.test(photo.name);
+          const sourceIsJpeg = photo.file.type === 'image/jpeg' || /\\.jpe?g$/i.test(photo.name);
+          let outputIsJpeg = sourceIsJpeg;
           const hasStamp = stamp.enabled && showStamped && outputFormat !== 'original';
           if (hasStamp) {
             blob = await renderStampedPhoto(photo, stamp, Number(quality) / 100);
-            if (keepExif && isJpeg) blob = await preserveExifOnJpeg(photo.file, blob);
+            outputIsJpeg = true;
+            if (keepExif && sourceIsJpeg) blob = await preserveExifOnJpeg(photo.file, blob);
             name = outputName(photo.name, 'stamped');
-          } else if (outputFormat === 'jpg' && !isJpeg) {
+          } else if (outputFormat === 'jpg' && !sourceIsJpeg) {
             blob = await convertPhotoToJpeg(photo, Number(quality) / 100);
+            outputIsJpeg = true;
             name = outputName(photo.name, 'converted');
           }
           if (typeof photo.latitude === 'number' && (photo.latitude < -90 || photo.latitude > 90 || !Number.isFinite(photo.latitude))) throw new Error('Latitude must be between −90 and 90 degrees.');
           if (typeof photo.longitude === 'number' && (photo.longitude < -180 || photo.longitude > 180 || !Number.isFinite(photo.longitude))) throw new Error('Longitude must be between −180 and 180 degrees.');
           if ((typeof photo.latitude === 'number') !== (typeof photo.longitude === 'number')) throw new Error('Enter both latitude and longitude, or clear both coordinates before exporting.');
           if (photo.altitude !== undefined && !Number.isFinite(photo.altitude)) throw new Error('Altitude must be a finite number.');
-          if ((removeGps || photo.removeGps) && !isJpeg) throw new Error('GPS metadata removal is supported for JPEG files only. This file was not changed.');
-          if ((removeGps || photo.removeGps) && isJpeg) {
+          if ((removeGps || photo.removeGps) && !sourceIsJpeg) throw new Error('GPS metadata removal is supported for JPEG files only. This file was not changed.');
+          if ((removeGps || photo.removeGps) && sourceIsJpeg) {
             blob = await removeGpsFromJpeg(new File([blob], name, { type: 'image/jpeg' }));
             name = outputName(photo.name, 'no-gps');
-          } else if (!removeGps && !photo.removeGps && isJpeg && typeof photo.latitude === 'number' && typeof photo.longitude === 'number') {
+          } else if (!removeGps && !photo.removeGps && outputIsJpeg && typeof photo.latitude === 'number' && typeof photo.longitude === 'number') {
             blob = await writeGpsToJpeg(new File([blob], name, { type: 'image/jpeg' }), photo.latitude, photo.longitude, photo.altitude);
             if (hasStamp) name = outputName(photo.name, 'stamped-geotagged');
             else name = outputName(photo.name, 'geotagged');
