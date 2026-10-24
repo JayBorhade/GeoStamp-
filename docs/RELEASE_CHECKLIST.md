@@ -1,12 +1,14 @@
 # GeoStamp Release Checklist
 
 ## Automated checks
-- [ ] `npm run typecheck`
-- [ ] `npm test`
-- [ ] `npm run build`
-- [ ] Review high/critical dependency advisories and update dependencies safely.
+- [x] `npm run typecheck` — passed in the latest CI run.
+- [x] `npm test` — 13 tests passed in the latest CI run.
+- [x] `npm run build` — passed in the latest CI run.
+- [x] Latest recorded audit: zero vulnerabilities; review the lockfile-based audit artifact again before release.
 - [ ] Confirm no secrets or private user data are committed.
 - [ ] Review the final diff and current Git status.
+
+- [x] `package-lock.json` is committed and CI/deployment use `npm ci`.
 
 ## Security and privacy
 - [ ] Confirm HTTPS and inspect deployed response headers.
