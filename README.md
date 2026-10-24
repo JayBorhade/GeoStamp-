@@ -12,14 +12,14 @@ GeoStamp is a responsive, privacy-conscious photo GPS and EXIF editor with a vis
 - Write or remove GPS metadata in JPEG files.
 - Create visible location/date/coordinate/custom-text stamps.
 - Batch apply actions and export copies as ZIP.
-- Reserved ad placements that never cover the editor or download controls.
+- Reserved ad placements that never cover the editor or download controls (an ad network/monetization provider is not connected yet).
 - No map in the editing interface.
 
 ## Run locally
 Requires Node.js 20 or newer.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
