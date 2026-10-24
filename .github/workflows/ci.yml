@@ -67,6 +67,8 @@ jobs:
             exit 0
           fi
           git commit -m "chore: commit reproducible npm lockfile"
+          git fetch origin "${GITHUB_HEAD_REF}"
+          git rebase "origin/${GITHUB_HEAD_REF}"
           AUTH_HEADER="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           git -c http.extraheader="AUTHORIZATION: basic $AUTH_HEADER" push origin "HEAD:${GITHUB_HEAD_REF}"
 
