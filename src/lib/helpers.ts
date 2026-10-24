@@ -15,7 +15,7 @@ export function outputName(name: string, stamped: boolean): string {
   const dot = basename.lastIndexOf('.');
   const base = dot > 0 ? basename.slice(0, dot) : basename;
   const extension = dot > 0 ? basename.slice(dot).toLowerCase() : '.img';
-  const safeBase = base.replace(/[. ]+$/g, '') || 'photo';
+  const safeBase = base.replace(/^[. ]+|[. ]+$/g, '') || 'photo';
   const jpegOutput = stamped || ['.jpg', '.jpeg'].includes(extension);
   return `${safeBase}-geostamp${stamped ? '-stamped' : ''}${jpegOutput ? '.jpg' : extension}`;
 }

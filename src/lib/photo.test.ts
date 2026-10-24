@@ -16,7 +16,7 @@ describe('photo helpers', () => {
     expect(outputName('trip.photo.jpeg', true)).toBe('trip.photo-geostamp-stamped.jpg');
     expect(outputName('image.png', false)).toBe('image-geostamp.png');
     expect(outputName('image.jpg', false)).toBe('image-geostamp.jpg');
-    expect(outputName('../folder\\photo.png', false)).toBe('.._folder_photo-geostamp.png');
+    expect(outputName('../folder\\photo.png', false)).toBe('folder_photo-geostamp.png');
   });
 
   it('formats valid local datetime values and rejects invalid ones', () => {

@@ -12,6 +12,8 @@ import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg, preserveExifOnJpeg, ty
 import { renderStampedPhoto, convertPhotoToJpeg } from './lib/stamp';
 
 const MAX_FILE_MB = 40;
+const MAX_PHOTOS = 50;
+const MAX_IMAGE_PIXELS = 60_000_000;
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
 const initialStamp: StampSettings = {
   enabled: true, showLocation: true, showDate: true, showCoordinates: false,
@@ -65,9 +67,12 @@ export default function App() {
   useEffect(() => () => { objectUrls.current.forEach(url => URL.revokeObjectURL(url)); objectUrls.current.clear(); }, []);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
-    const files = Array.from(fileList);
+    const incoming = Array.from(fileList);
+    const remainingSlots = Math.max(0, MAX_PHOTOS - photos.length);
+    const files = incoming.slice(0, remainingSlots);
     const next: PhotoItem[] = [];
     const errors: string[] = [];
+    if (incoming.length > files.length) errors.push(`Only ${MAX_PHOTOS} photos can be kept in the workspace at once; ${incoming.length - files.length} file(s) skipped.`);
     for (const file of files) {
       const isSupported = ACCEPTED.includes(file.type) || /\.(jpe?g|png|webp|avif)$/i.test(file.name);
       if (!isSupported) { errors.push(`${file.name}: unsupported format`); continue; }
@@ -82,6 +87,8 @@ export default function App() {
           image.onerror = () => reject(new Error('Could not decode image'));
           image.src = url;
         });
+        if (!Number.isFinite(dimensions.width) || !Number.isFinite(dimensions.height) || dimensions.width < 1 || dimensions.height < 1) throw new Error('Invalid image dimensions');
+        if (dimensions.width * dimensions.height > MAX_IMAGE_PIXELS) throw new Error('Image dimensions are too large to process safely (maximum 60 megapixels)');
         const metadata = await readMetadata(file).catch((): ReadMetadata => ({}));
         next.push({
           id: id(), file, url, name: file.name, size: file.size,
@@ -101,7 +108,7 @@ export default function App() {
       setActiveId(current => current ?? next[0].id);
       setNotice({ kind: errors.length ? 'info' : 'success', text: `${next.length} photo${next.length === 1 ? '' : 's'} added${errors.length ? `. ${errors.length} skipped — check format or file size.` : '.'}` });
     } else if (errors.length) setNotice({ kind: 'error', text: errors.slice(0, 2).join(' • ') });
-  }, []);
+  }, [photos.length]);
 
   const removePhoto = (photoId: string) => {
     const target = photos.find(photo => photo.id === photoId);
@@ -190,6 +197,8 @@ export default function App() {
           }
           if (typeof photo.latitude === 'number' && (photo.latitude < -90 || photo.latitude > 90 || !Number.isFinite(photo.latitude))) throw new Error('Latitude must be between −90 and 90 degrees.');
           if (typeof photo.longitude === 'number' && (photo.longitude < -180 || photo.longitude > 180 || !Number.isFinite(photo.longitude))) throw new Error('Longitude must be between −180 and 180 degrees.');
+          if ((typeof photo.latitude === 'number') !== (typeof photo.longitude === 'number')) throw new Error('Enter both latitude and longitude, or clear both coordinates before exporting.');
+          if (photo.altitude !== undefined && !Number.isFinite(photo.altitude)) throw new Error('Altitude must be a finite number.');
           if ((removeGps || photo.removeGps) && !isJpeg) throw new Error('GPS metadata removal is supported for JPEG files only. This file was not changed.');
           if ((removeGps || photo.removeGps) && isJpeg) {
             blob = await removeGpsFromJpeg(new File([blob], name, { type: 'image/jpeg' }));
