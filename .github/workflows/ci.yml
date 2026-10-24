@@ -21,6 +21,18 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Type check
         run: npm run typecheck
+      - name: Dependency audit report
+        shell: bash
+        run: |
+          npm audit --json > npm-audit.json || true
+          node --input-type=commonjs -e "try { const r = require('./npm-audit.json'); console.log(JSON.stringify({ vulnerabilities: r.metadata?.vulnerabilities ?? null, packages: Object.entries(r.vulnerabilities ?? {}).map(([name, item]) => ({ name, severity: item.severity, range: item.range, fixAvailable: item.fixAvailable })) }, null, 2)); } catch { console.error('Dependency audit report could not be parsed; inspect npm output and network availability.'); process.exitCode = 0; }"
+      - name: Upload dependency audit report
+        if: always() && hashFiles('npm-audit.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: npm-audit.json
+          retention-days: 14
       - name: Lint
         run: npm run lint
       - name: Unit tests
