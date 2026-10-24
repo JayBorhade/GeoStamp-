@@ -184,7 +184,7 @@ export default function App() {
         try {
           let blob: Blob = photo.file;
           let name = photo.name;
-          const sourceIsJpeg = photo.file.type === 'image/jpeg' || /\\.jpe?g$/i.test(photo.name);
+          const sourceIsJpeg = photo.file.type === 'image/jpeg' || /\.jpe?g$/i.test(photo.name);
           let outputIsJpeg = sourceIsJpeg;
           const hasStamp = stamp.enabled && showStamped && outputFormat !== 'original';
           if (hasStamp) {
