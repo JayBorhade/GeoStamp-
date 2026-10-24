@@ -37,9 +37,11 @@ The first release focuses on JPEG metadata writing. PNG/WebP and other image typ
 Photos are selected by the user and processed in the browser. Current location is requested only after the user chooses Capture Location. If optional reverse geocoding is added, disclose the provider and the location data sent to it. This initial version does not upload photos to a GeoStamp server.
 
 ## Project docs
+- `docs/SECURITY.md` — threat model, privacy, deployment hardening and incident response
 - `docs/ROADMAP.md` — milestones and acceptance criteria
 - `docs/ARCHITECTURE.md` — architecture and design decisions
 - `docs/TESTING.md` — test strategy and release checks
+- `docs/RELEASE_CHECKLIST.md` — release acceptance checklist
 
 ## Important limitations
 Browser geolocation requires a secure context (HTTPS or localhost) and user permission. Actual EXIF preservation varies by file type and browser library support. Verify exported files with a metadata reader before treating the result as production-ready.

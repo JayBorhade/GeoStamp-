@@ -3,20 +3,25 @@ import { formatBytes, localDateTime, outputName } from './helpers';
 import { toDms } from './metadata';
 
 describe('photo helpers', () => {
-  it('formats byte sizes', () => {
+  it('formats byte sizes safely', () => {
     expect(formatBytes(0)).toBe('0 B');
     expect(formatBytes(1024)).toBe('1.0 KB');
     expect(formatBytes(1024 ** 2)).toBe('1.0 MB');
+    expect(formatBytes(-1)).toBe('0 B');
+    expect(formatBytes(Number.NaN)).toBe('0 B');
+    expect(formatBytes(Number.POSITIVE_INFINITY)).toBe('0 B');
   });
 
-  it('preserves untouched image extensions and labels JPEG stamps', () => {
+  it('preserves supported extensions and labels JPEG stamps', () => {
     expect(outputName('trip.photo.jpeg', true)).toBe('trip.photo-geostamp-stamped.jpg');
     expect(outputName('image.png', false)).toBe('image-geostamp.png');
     expect(outputName('image.jpg', false)).toBe('image-geostamp.jpg');
+    expect(outputName('../folder\\photo.png', false)).toBe('.._folder_photo-geostamp.png');
   });
 
   it('formats valid local datetime values and rejects invalid ones', () => {
     expect(localDateTime('not a date')).toBe('');
+    expect(localDateTime('')).toBe('');
     expect(localDateTime('2024-07-26T10:12:00.000Z')).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 });
