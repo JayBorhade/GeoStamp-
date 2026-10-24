@@ -10,7 +10,8 @@ Treat filenames, image bytes, EXIF fields, coordinates, timestamps, and custom s
 
 - Serve the application over HTTPS. Browser geolocation and PWA installation require a secure context.
 - Keep environment secrets out of client-side code and Git. Vite variables exposed with a `VITE_` prefix are public.
-- Security headers are configured in `vercel.json` and `public/_headers`. Confirm the chosen hosting provider actually applies them; GitHub Pages does not guarantee support for arbitrary `_headers` files.
+- Security headers are configured in `vercel.json` and `public/_headers`. GitHub Pages does not guarantee support for arbitrary `_headers` files, so `index.html` also includes a baseline Content Security Policy that works with static hosting. A CSP meta tag cannot set every response header (notably `frame-ancestors`); use a host that supports response headers if the full header policy is required.
+- The CSP intentionally limits scripts, connections, workers and resources to the same origin plus local `blob:`/`data:` image handling. Re-test the policy whenever adding an ad SDK, analytics, remote fonts, external APIs, or other third-party code.
 - Review the Content Security Policy whenever adding a script, worker, external font, API, or third-party integration. Do not add broad wildcards to make a blocked integration work.
 - Keep dependency versions reviewed and resolve high/critical advisories before a public production launch.
 - Validate uploaded file size and type before expensive image processing, and test malformed images in supported browsers.
