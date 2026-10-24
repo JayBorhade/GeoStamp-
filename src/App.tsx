@@ -209,7 +209,7 @@ export default function App() {
             blob = await writeGpsToJpeg(new File([blob], name, { type: 'image/jpeg' }), photo.latitude, photo.longitude, photo.altitude);
             if (hasStamp) name = outputName(photo.name, 'stamped-geotagged');
             else name = outputName(photo.name, 'geotagged');
-          } else if (!removeGps && (typeof photo.latitude === 'number' || typeof photo.longitude === 'number') && !isJpeg) {
+          } else if (!removeGps && (typeof photo.latitude === 'number' || typeof photo.longitude === 'number') && !outputIsJpeg) {
             throw new Error('GPS writing is currently supported for JPEG only. This file can be previewed, but its GPS metadata was not written.');
           }
           if (hasStamp && !keepExif && sourceIsJpeg && !removeGps) {
