@@ -5,6 +5,7 @@ declare module 'piexifjs' {
     load(data: string): unknown;
     dump(data: unknown): string;
     insert(exifBytes: string, jpegDataUrl: string): string;
+    remove(jpegDataUrl: string): string;
   };
   export default piexif;
 }

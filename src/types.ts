@@ -10,6 +10,7 @@ export interface PhotoItem {
   latitude?: number;
   longitude?: number;
   altitude?: number;
+  gpsDirty: boolean;
   locationName: string;
   dateTime: string;
   tags: string[];

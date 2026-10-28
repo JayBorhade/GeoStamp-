@@ -106,6 +106,13 @@ export async function removeGpsFromJpeg(file: File): Promise<Blob> {
   return dataUrlToBlob(piexif.insert(piexif.dump(exif as never), dataUrl));
 }
 
+export async function removeExifFromJpeg(file: File): Promise<Blob> {
+  if (!file.type.toLowerCase().includes('jpeg') && !file.name.toLowerCase().match(/\.jpe?g$/)) {
+    throw new Error('EXIF removal currently supports JPEG files only.');
+  }
+  return dataUrlToBlob(piexif.remove(await fileToDataUrl(file)));
+}
+
 function loadExifOrEmpty(dataUrl: string): Record<string, unknown> {
   try {
     return piexif.load(dataUrl) as unknown as Record<string, unknown>;

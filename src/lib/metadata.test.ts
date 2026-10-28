@@ -3,19 +3,12 @@ import * as exifr from 'exifr';
 import {
   preserveExifOnJpeg,
   readMetadata,
+  removeExifFromJpeg,
   removeGpsFromJpeg,
   writeGpsToJpeg,
 } from './metadata';
+import { jpegFile as fixture } from '../test/jpeg-fixture';
 
-// A small valid 1×1 JPEG fixture. These tests exercise real EXIF bytes rather
-// than mocking piexifjs or the metadata parser.
-const JPEG_BASE64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/AT//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwD/2Q==';
-
-function fixture(name = 'fixture.jpg'): File {
-  const binary = atob(JPEG_BASE64);
-  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
-  return new File([bytes], name, { type: 'image/jpeg' });
-}
 
 async function parseGps(blob: Blob) {
   return exifr.parse(new File([blob], 'output.jpg', { type: 'image/jpeg' }), { gps: true });
@@ -42,6 +35,14 @@ describe('JPEG EXIF round-trip', () => {
     expect(parsed?.GPSAltitude).toBeUndefined();
   });
 
+  it('removes the source EXIF block when requested', async () => {
+    const tagged = await writeGpsToJpeg(fixture(), 19.076, 72.8777, 15);
+    const output = await removeExifFromJpeg(new File([tagged], 'tagged.jpg', { type: 'image/jpeg' }));
+    const parsed = await exifr.parse(new File([output], 'stripped.jpg', { type: 'image/jpeg' }), { gps: true, exif: true });
+
+    expect(parsed).toBeUndefined();
+  });
+
   it('clears stale altitude when coordinates are rewritten without altitude', async () => {
     const tagged = await writeGpsToJpeg(fixture(), 19.076, 72.8777, 420);
     const rewritten = await writeGpsToJpeg(new File([tagged], 'tagged.jpg', { type: 'image/jpeg' }), 19.076, 72.8777);
@@ -57,7 +58,7 @@ describe('JPEG EXIF round-trip', () => {
     const tagged = await writeGpsToJpeg(fixture(), 19.076, 72.8777);
     const output = await preserveExifOnJpeg(
       new File([tagged], 'tagged.jpg', { type: 'image/jpeg' }),
-      new Blob([Uint8Array.from(atob(JPEG_BASE64), character => character.charCodeAt(0))], { type: 'image/jpeg' }),
+      fixture(),
     );
     const parsed = await parseGps(output);
 
