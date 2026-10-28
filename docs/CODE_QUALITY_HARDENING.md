@@ -19,9 +19,9 @@ This implementation pass applies focused security, correctness, dependency, CI a
 - Added security notes and an explicit release checklist.
 
 ## Verification status
-- Latest verified CI run `40068725245` passed lockfile-based dependency installation, TypeScript type checking, dependency audit report, ESLint, all 13 unit tests and the production build.
-- The most recent audit report before the lockfile-based run reported 0 info, 0 low, 0 moderate, 0 high and 0 critical vulnerabilities; the lockfile-based run's audit step also passed and should be reviewed in its artifact before release.
-- These are automated repository checks. They do not replace real-device/browser testing, independent EXIF round-trip verification, deployed-header inspection, or a production deployment review.
+- CI run `40668494403` passed for commit `e6881a059fe6023461d4d193055a387880fa733f`: lockfile install, TypeScript type check, dependency audit, ESLint, all 15 unit tests, root build and GitHub Pages base-path/PWA asset smoke check.
+- A fresh local `npm audit --audit-level=high` reported zero vulnerabilities.
+- These are automated repository checks. They do not replace real-device/browser testing, independent EXIF round-trip verification, deployed-header inspection, or a production deployment review. The expected GitHub Pages URL currently returns HTTP 404.
 
 ## Remaining priorities
 1. Add browser-level tests for object URL cleanup, large/malformed image handling, batch partial failures and mobile downloads.
