@@ -8,10 +8,13 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import type { PhotoItem, EditorTab, StampSettings } from './types';
-import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg, preserveExifOnJpeg, type ReadMetadata } from './lib/metadata';
+import { readMetadata, writeGpsToJpeg, removeGpsFromJpeg, removeExifFromJpeg, preserveExifOnJpeg, type ReadMetadata } from './lib/metadata';
 import { renderStampedPhoto, convertPhotoToJpeg } from './lib/stamp';
+import { safeFileStem } from './lib/helpers';
 
 const MAX_FILE_MB = 40;
+const MAX_PHOTOS = 50;
+const MAX_IMAGE_PIXELS = 60_000_000;
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
 const initialStamp: StampSettings = {
   enabled: true, showLocation: true, showDate: true, showCoordinates: false,
@@ -30,10 +33,8 @@ function downloadBlob(blob: Blob, name: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function outputName(name: string, suffix: string) {
-  const stem = name.replace(/\.[^.]+$/, '');
-  return `${stem}-${suffix}.jpg`;
+  return `${safeFileStem(name)}-${suffix}.jpg`;
 }
-
 export default function App() {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -65,9 +66,12 @@ export default function App() {
   useEffect(() => () => { objectUrls.current.forEach(url => URL.revokeObjectURL(url)); objectUrls.current.clear(); }, []);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
-    const files = Array.from(fileList);
+    const incoming = Array.from(fileList);
+    const remainingSlots = Math.max(0, MAX_PHOTOS - photos.length);
+    const files = incoming.slice(0, remainingSlots);
     const next: PhotoItem[] = [];
     const errors: string[] = [];
+    if (incoming.length > files.length) errors.push(`Only ${MAX_PHOTOS} photos can be kept in the workspace at once; ${incoming.length - files.length} file(s) skipped.`);
     for (const file of files) {
       const isSupported = ACCEPTED.includes(file.type) || /\.(jpe?g|png|webp|avif)$/i.test(file.name);
       if (!isSupported) { errors.push(`${file.name}: unsupported format`); continue; }
@@ -82,12 +86,14 @@ export default function App() {
           image.onerror = () => reject(new Error('Could not decode image'));
           image.src = url;
         });
+        if (!Number.isFinite(dimensions.width) || !Number.isFinite(dimensions.height) || dimensions.width < 1 || dimensions.height < 1) throw new Error('Invalid image dimensions');
+        if (dimensions.width * dimensions.height > MAX_IMAGE_PIXELS) throw new Error('Image dimensions are too large to process safely (maximum 60 megapixels)');
         const metadata = await readMetadata(file).catch((): ReadMetadata => ({}));
         next.push({
           id: id(), file, url, name: file.name, size: file.size,
           width: dimensions.width, height: dimensions.height,
           latitude: metadata.latitude, longitude: metadata.longitude, altitude: metadata.altitude,
-          locationName: '', dateTime: metadata.dateTime ?? '', tags: [], status: 'ready', removeGps: false
+          gpsDirty: false, locationName: '', dateTime: metadata.dateTime ?? '', tags: [], status: 'ready', removeGps: false
         });
       } catch {
         URL.revokeObjectURL(url);
@@ -101,7 +107,7 @@ export default function App() {
       setActiveId(current => current ?? next[0].id);
       setNotice({ kind: errors.length ? 'info' : 'success', text: `${next.length} photo${next.length === 1 ? '' : 's'} added${errors.length ? `. ${errors.length} skipped — check format or file size.` : '.'}` });
     } else if (errors.length) setNotice({ kind: 'error', text: errors.slice(0, 2).join(' • ') });
-  }, []);
+  }, [photos.length]);
 
   const removePhoto = (photoId: string) => {
     const target = photos.find(photo => photo.id === photoId);
@@ -125,7 +131,7 @@ export default function App() {
     if (!navigator.geolocation) { setNotice({ kind: 'error', text: 'Location capture is not supported by this browser.' }); return; }
     setBusy(true); setProgress('Requesting location permission…');
     navigator.geolocation.getCurrentPosition(position => {
-      updatePhoto(active.id, { latitude: position.coords.latitude, longitude: position.coords.longitude, altitude: position.coords.altitude ?? undefined, removeGps: false });
+      updatePhoto(active.id, { latitude: position.coords.latitude, longitude: position.coords.longitude, altitude: position.coords.altitude ?? undefined, gpsDirty: true, removeGps: false });
       setBusy(false); setProgress('');
       setNotice({ kind: 'success', text: 'Current coordinates captured. Apply to selected photos or export this photo.' });
       setTab('Location');
@@ -142,7 +148,7 @@ export default function App() {
     }
     const ids = selectedIds.length ? selectedIds : [active.id];
     setPhotos(current => current.map(photo => ids.includes(photo.id) ? {
-      ...photo, latitude: active.latitude, longitude: active.longitude, altitude: active.altitude, locationName: active.locationName, removeGps: false
+      ...photo, latitude: active.latitude, longitude: active.longitude, altitude: active.altitude, locationName: active.locationName, gpsDirty: true, removeGps: false
     } : photo));
     setNotice({ kind: 'success', text: `Location applied to ${ids.length} photo${ids.length === 1 ? '' : 's'}.` });
   };
@@ -150,7 +156,7 @@ export default function App() {
   const removeLocationFromSelected = () => {
     const ids = selectedIds.length ? selectedIds : active ? [active.id] : [];
     if (!ids.length) return;
-    setPhotos(current => current.map(photo => ids.includes(photo.id) ? { ...photo, latitude: undefined, longitude: undefined, altitude: undefined, locationName: '', removeGps: true } : photo));
+    setPhotos(current => current.map(photo => ids.includes(photo.id) ? { ...photo, latitude: undefined, longitude: undefined, altitude: undefined, gpsDirty: false, locationName: '', removeGps: true } : photo));
     setNotice({ kind: 'success', text: `GPS values cleared from ${ids.length} photo${ids.length === 1 ? '' : 's'} in the workspace. Export to write the change to copies.` });
   };
 
@@ -178,31 +184,43 @@ export default function App() {
         try {
           let blob: Blob = photo.file;
           let name = photo.name;
-          const isJpeg = photo.file.type === 'image/jpeg' || /\.jpe?g$/i.test(photo.name);
+          const sourceIsJpeg = photo.file.type === 'image/jpeg' || /\.jpe?g$/i.test(photo.name);
+          let outputIsJpeg = sourceIsJpeg;
           const hasStamp = stamp.enabled && showStamped && outputFormat !== 'original';
           if (hasStamp) {
             blob = await renderStampedPhoto(photo, stamp, Number(quality) / 100);
-            if (keepExif && isJpeg) blob = await preserveExifOnJpeg(photo.file, blob);
+            outputIsJpeg = true;
+            if (keepExif && sourceIsJpeg) blob = await preserveExifOnJpeg(photo.file, blob);
             name = outputName(photo.name, 'stamped');
-          } else if (outputFormat === 'jpg' && !isJpeg) {
+          } else if (outputFormat === 'jpg' && !sourceIsJpeg) {
             blob = await convertPhotoToJpeg(photo, Number(quality) / 100);
+            outputIsJpeg = true;
             name = outputName(photo.name, 'converted');
           }
           if (typeof photo.latitude === 'number' && (photo.latitude < -90 || photo.latitude > 90 || !Number.isFinite(photo.latitude))) throw new Error('Latitude must be between −90 and 90 degrees.');
           if (typeof photo.longitude === 'number' && (photo.longitude < -180 || photo.longitude > 180 || !Number.isFinite(photo.longitude))) throw new Error('Longitude must be between −180 and 180 degrees.');
-          if ((removeGps || photo.removeGps) && !isJpeg) throw new Error('GPS metadata removal is supported for JPEG files only. This file was not changed.');
-          if ((removeGps || photo.removeGps) && isJpeg) {
-            blob = await removeGpsFromJpeg(new File([blob], name, { type: 'image/jpeg' }));
-            name = outputName(photo.name, 'no-gps');
-          } else if (!removeGps && !photo.removeGps && isJpeg && typeof photo.latitude === 'number' && typeof photo.longitude === 'number') {
-            blob = await writeGpsToJpeg(new File([blob], name, { type: 'image/jpeg' }), photo.latitude, photo.longitude, photo.altitude);
-            if (hasStamp) name = outputName(photo.name, 'stamped-geotagged');
-            else name = outputName(photo.name, 'geotagged');
-          } else if (!removeGps && (typeof photo.latitude === 'number' || typeof photo.longitude === 'number') && !isJpeg) {
-            throw new Error('GPS writing is currently supported for JPEG only. This file can be previewed, but its GPS metadata was not written.');
+          if ((typeof photo.latitude === 'number') !== (typeof photo.longitude === 'number')) throw new Error('Enter both latitude and longitude, or clear both coordinates before exporting.');
+          if (photo.altitude !== undefined && !Number.isFinite(photo.altitude)) throw new Error('Altitude must be a finite number.');
+          if ((removeGps || photo.removeGps) && !sourceIsJpeg) throw new Error('GPS metadata removal is supported for JPEG files only. This file was not changed.');
+          if (!keepExif && !hasStamp && !sourceIsJpeg && outputFormat === 'original') {
+            throw new Error('EXIF removal is currently supported for JPEG only. Choose JPEG output to create a metadata-stripped copy.');
           }
-          if (hasStamp && !keepExif && isJpeg && !removeGps) {
-            // Canvas output is a new image and does not retain EXIF by default; this is expected when Keep EXIF is off.
+          if ((removeGps || photo.removeGps) && sourceIsJpeg) {
+            const jpeg = new File([blob], name, { type: 'image/jpeg' });
+            blob = keepExif ? await removeGpsFromJpeg(jpeg) : await removeExifFromJpeg(jpeg);
+            name = outputName(photo.name, keepExif ? 'no-gps' : 'no-exif');
+          } else {
+            if (!keepExif && !hasStamp && sourceIsJpeg && outputIsJpeg) {
+              blob = await removeExifFromJpeg(new File([blob], name, { type: 'image/jpeg' }));
+              name = outputName(photo.name, 'no-exif');
+            }
+            if (outputIsJpeg && typeof photo.latitude === 'number' && typeof photo.longitude === 'number' && (keepExif || photo.gpsDirty)) {
+              blob = await writeGpsToJpeg(new File([blob], name, { type: 'image/jpeg' }), photo.latitude, photo.longitude, photo.altitude);
+              if (hasStamp) name = outputName(photo.name, 'stamped-geotagged');
+              else name = outputName(photo.name, 'geotagged');
+            } else if (photo.gpsDirty && (typeof photo.latitude === 'number' || typeof photo.longitude === 'number') && !outputIsJpeg) {
+              throw new Error('GPS writing is currently supported for JPEG only. This file can be previewed, but its GPS metadata was not written.');
+            }
           }
           let finalName = name;
           let suffix = 2;
@@ -344,10 +362,10 @@ export default function App() {
                 <div className="section-title"><div><MapPin size={17} /><strong>GPS location</strong></div><button className="small-green-button" onClick={captureLocation} disabled={busy}><Crosshair size={14} /> Capture</button></div>
                 <p className="field-help">Enter coordinates manually or capture your current position. No map needed.</p>
                 <div className="field-grid two">
-                  <label>Latitude<input type="number" min="-90" max="90" step="any" placeholder="e.g. 19.0760" value={active.latitude ?? ''} onChange={event => updatePhoto(active.id, { latitude: event.target.value === '' ? undefined : Number(event.target.value), removeGps: false })} /></label>
-                  <label>Longitude<input type="number" min="-180" max="180" step="any" placeholder="e.g. 72.8777" value={active.longitude ?? ''} onChange={event => updatePhoto(active.id, { longitude: event.target.value === '' ? undefined : Number(event.target.value), removeGps: false })} /></label>
+                  <label>Latitude<input type="number" min="-90" max="90" step="any" placeholder="e.g. 19.0760" value={active.latitude ?? ''} onChange={event => updatePhoto(active.id, { latitude: event.target.value === '' ? undefined : Number(event.target.value), gpsDirty: true, removeGps: false })} /></label>
+                  <label>Longitude<input type="number" min="-180" max="180" step="any" placeholder="e.g. 72.8777" value={active.longitude ?? ''} onChange={event => updatePhoto(active.id, { longitude: event.target.value === '' ? undefined : Number(event.target.value), gpsDirty: true, removeGps: false })} /></label>
                 </div>
-                <label className="field-label">Altitude (metres)<input type="number" step="any" placeholder="Optional" value={active.altitude ?? ''} onChange={event => updatePhoto(active.id, { altitude: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
+                <label className="field-label">Altitude (metres)<input type="number" step="any" placeholder="Optional" value={active.altitude ?? ''} onChange={event => updatePhoto(active.id, { altitude: event.target.value === '' ? undefined : Number(event.target.value), gpsDirty: true })} /></label>
                 <label className="field-label">Location name <span>Optional</span><input placeholder="e.g. Marine Drive, Mumbai" value={active.locationName} onChange={event => updatePhoto(active.id, { locationName: event.target.value })} /></label>
                 <label className="field-label">Date/time for stamp <span>Optional · not written to EXIF</span><input type="datetime-local" value={active.dateTime} onChange={event => updatePhoto(active.id, { dateTime: event.target.value })} /></label>
                 <div className="location-summary"><MapPin size={16} /><div><strong>{active.locationName || 'Location not named'}</strong><span>{typeof active.latitude === 'number' && typeof active.longitude === 'number' ? `${active.latitude.toFixed(5)}, ${active.longitude.toFixed(5)}` : 'No GPS coordinates set'}</span></div><span className={typeof active.latitude === 'number' && typeof active.longitude === 'number' ? 'status-good' : 'status-muted'}>{typeof active.latitude === 'number' && typeof active.longitude === 'number' ? 'Set' : 'Missing'}</span></div>
@@ -386,6 +404,7 @@ export default function App() {
                 </div>
                 <div className="warning-note"><AlertCircle size={16} /><span>Canvas stamping re-encodes pixels and may remove existing metadata. Keep EXIF is applied only where this build can safely preserve or write supported fields.</span></div>
                 <label className="check-row"><input type="checkbox" checked={keepExif} onChange={event => setKeepExif(event.target.checked)} /> Keep supported EXIF data</label>
+                <p className="field-help">When off, JPEG exports remove imported EXIF. GPS is added only after you edit or apply coordinates.</p>
                 <button className="secondary-button full-button" onClick={() => setNotice({ kind: 'info', text: 'The metadata inspector shows fields this build can read. Only GPS writing/removal for JPEG is implemented; other EXIF fields remain read-only.' })}><Info size={15} /> Metadata support details</button>
               </div>}
               {tab === 'Tags' && <div className="editor-content">
@@ -406,7 +425,7 @@ export default function App() {
         <div className="export-options">
           <label>Format<select value={outputFormat} onChange={event => setOutputFormat(event.target.value)}><option value="jpg">JPEG</option><option value="original">Keep original (no stamp)</option></select></label>
           <label className="quality-control">JPEG quality<select value={quality} onChange={event => setQuality(event.target.value)}><option value="75">75%</option><option value="85">85%</option><option value="90">90%</option><option value="95">95%</option></select></label>
-          <label className="check-row keep-exif"><input type="checkbox" checked={keepExif} onChange={event => setKeepExif(event.target.checked)} /> Keep EXIF</label>
+          <label className="check-row keep-exif" title="When off, JPEG exports remove existing EXIF and keep only GPS values you apply."><input type="checkbox" checked={keepExif} onChange={event => setKeepExif(event.target.checked)} /> Keep EXIF</label>
           <label className="check-row stamp-toggle"><input type="checkbox" checked={stamp.enabled && showStamped} onChange={event => { setStamp(current => ({ ...current, enabled: event.target.checked })); setShowStamped(event.target.checked); }} /> Add stamp</label>
         </div>
         <button className="download-button" disabled={!photos.length || busy} onClick={() => void exportPhotos()}>{busy ? <LoaderCircle className="spin" size={18} /> : <Download size={19} />}<span>{busy ? progress || 'Working…' : `Download ${selectedPhotos.length || (active ? 1 : 0)} photo${(selectedPhotos.length || (active ? 1 : 0)) === 1 ? '' : 's'}`}</span></button>

@@ -12,18 +12,22 @@ GeoStamp is a responsive, privacy-conscious photo GPS and EXIF editor with a vis
 - Write or remove GPS metadata in JPEG files.
 - Create visible location/date/coordinate/custom-text stamps.
 - Batch apply actions and export copies as ZIP.
-- Reserved ad placements that never cover the editor or download controls.
+- Reserved ad placements that never cover the editor or download controls (an ad network/monetization provider is not connected yet).
 - No map in the editing interface.
 
 ## Run locally
 Requires Node.js 20 or newer.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-## Deployment\n\nThe project includes a Vercel configuration and a small same-origin service worker for caching the app shell and visited static assets. Deploy over HTTPS for browser geolocation and installability. Verify the installed experience on target browsers before launch.\n\n## Verify
+## Deployment
+
+The project includes a Vercel configuration and a small same-origin service worker for caching the app shell and visited static assets. The Vercel file is deployment configuration, not proof that a Vercel project is linked. For GitHub Pages, first open repository **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**; the workflow deliberately does not try to enable Pages automatically because that requires an elevated token not available to the normal workflow token. A push to `main` then builds and deploys the site. Deploy over HTTPS for browser geolocation and installability, and verify the installed experience on target browsers before launch.
+
+## Verify
 ```bash
 npm run typecheck
 npm test
@@ -37,9 +41,11 @@ The first release focuses on JPEG metadata writing. PNG/WebP and other image typ
 Photos are selected by the user and processed in the browser. Current location is requested only after the user chooses Capture Location. If optional reverse geocoding is added, disclose the provider and the location data sent to it. This initial version does not upload photos to a GeoStamp server.
 
 ## Project docs
+- `docs/SECURITY.md` — threat model, privacy, deployment hardening and incident response
 - `docs/ROADMAP.md` — milestones and acceptance criteria
 - `docs/ARCHITECTURE.md` — architecture and design decisions
 - `docs/TESTING.md` — test strategy and release checks
+- `docs/RELEASE_CHECKLIST.md` — release acceptance checklist
 
 ## Important limitations
 Browser geolocation requires a secure context (HTTPS or localhost) and user permission. Actual EXIF preservation varies by file type and browser library support. Verify exported files with a metadata reader before treating the result as production-ready.

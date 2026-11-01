@@ -82,9 +82,14 @@ export async function writeGpsToJpeg(file: File, latitude: number, longitude: nu
   gps[piexif.GPSIFD.GPSLatitude] = toDms(latitude);
   gps[piexif.GPSIFD.GPSLongitudeRef] = longitude < 0 ? 'W' : 'E';
   gps[piexif.GPSIFD.GPSLongitude] = toDms(longitude);
-  if (typeof altitude === 'number' && Number.isFinite(altitude)) {
+  if (altitude !== undefined && !Number.isFinite(altitude)) throw new Error('Altitude must be a finite number.');
+  if (typeof altitude === 'number') {
     gps[piexif.GPSIFD.GPSAltitudeRef] = altitude < 0 ? 1 : 0;
     gps[piexif.GPSIFD.GPSAltitude] = [Math.round(Math.abs(altitude) * 100), 100];
+  } else {
+    // Do not preserve a stale altitude from the source when the user cleared it.
+    delete gps[piexif.GPSIFD.GPSAltitudeRef];
+    delete gps[piexif.GPSIFD.GPSAltitude];
   }
   exif.GPS = gps;
   const output = piexif.insert(piexif.dump(exif as never), dataUrl);
@@ -99,6 +104,13 @@ export async function removeGpsFromJpeg(file: File): Promise<Blob> {
   const exif = loadExifOrEmpty(dataUrl);
   exif.GPS = {};
   return dataUrlToBlob(piexif.insert(piexif.dump(exif as never), dataUrl));
+}
+
+export async function removeExifFromJpeg(file: File): Promise<Blob> {
+  if (!file.type.toLowerCase().includes('jpeg') && !file.name.toLowerCase().match(/\.jpe?g$/)) {
+    throw new Error('EXIF removal currently supports JPEG files only.');
+  }
+  return dataUrlToBlob(piexif.remove(await fileToDataUrl(file)));
 }
 
 function loadExifOrEmpty(dataUrl: string): Record<string, unknown> {

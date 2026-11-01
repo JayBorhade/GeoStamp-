@@ -32,7 +32,7 @@ export async function renderStampedPhoto(photo: PhotoItem, settings: StampSettin
   }
   if (settings.customText.trim()) lines.push(settings.customText.trim());
   if (!lines.length) lines.push('GeoStamp');
-  context.font = `600 ${fontSize}px Inter, system-ui, sans-serif`;
+  context.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
   const textWidth = Math.max(...lines.map(line => context.measureText(line).width));
   const lineHeight = fontSize * 1.45;
   const boxWidth = textWidth + padding * 2;
